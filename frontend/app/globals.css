@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 20% 5%;
+    --foreground: 0 0% 100%;
+    
+    --card: 240 17% 8%;
+    --card-foreground: 0 0% 100%;
+    
+    --popover: 240 17% 8%;
+    --popover-foreground: 0 0% 100%;
+    
+    --primary: 190 100% 50%;
+    --primary-foreground: 0 0% 0%;
+    
+    --secondary: 262 83% 58%;
+    --secondary-foreground: 0 0% 100%;
+    
+    --muted: 240 10% 15%;
+    --muted-foreground: 240 5% 65%;
+    
+    --accent: 190 100% 50%;
+    --accent-foreground: 0 0% 0%;
+    
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 10% 15%;
+    --input: 240 10% 15%;
+    --ring: 190 100% 50%;
+    
+    --radius: 0.5rem;
+  }
+
+  html {
+    /* Responsive font size: scales down 10% on mobile */
+    font-size: clamp(0.9rem, 1vw + 0.5rem, 1rem);
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-surface/70 backdrop-blur-md border border-white/5;
+  }
+
+  .cyan-glow {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+  }
+
+  .mobile-card {
+    @apply p-4 rounded-xl border border-white/5 bg-surface/50 mb-3;
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+  }
+}
+
+/* Recharts fix */
+.recharts-responsive-container {
+  min-height: 100px;
+  min-width: 0;
+}
+
+/* Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes cyan-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.animate-cyan-pulse {
+  animation: cyan-pulse 4s ease-in-out infinite;
+}

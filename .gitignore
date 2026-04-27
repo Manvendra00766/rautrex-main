@@ -1,0 +1,21 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/models_cache/*.pkl
+backend/models_cache/*.pth
+backend/rautrex.db
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
