@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: rautrex-backend
+    env: docker
+    plan: free
+    region: ohio
+    dockerContext: backend
+    dockerfilePath: backend/Dockerfile
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PORT
+        value: 8000
