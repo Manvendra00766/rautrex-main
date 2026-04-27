@@ -218,24 +218,28 @@ export default function RiskPage() {
                   value={(results.risk_score || 0).toFixed(1)} 
                   icon={<AlertTriangle className={cn((results.risk_score || 0) > 70 ? "text-red-500" : "text-green-500")} />} 
                   trend="Aggregate Risk (0-100)"
+                  valueClassName={cn((results.risk_score || 0) > 70 ? "text-red-500" : "text-green-500")}
                 />
                 <MetricCard 
                   title="Max Drawdown" 
                   value={`${((results.metrics?.max_drawdown || 0) * 100).toFixed(2)}%`} 
                   icon={<TrendingDown className="text-red-500" />} 
                   trend={`Recovery: ${results.metrics?.max_dd_duration_days || 0} days`}
+                  valueClassName="text-red-500"
                 />
                 <MetricCard 
                   title="Sharpe Ratio" 
                   value={(results.metrics?.sharpe || 0).toFixed(2)} 
                   icon={<Activity className="text-accent" />} 
                   trend="Risk-adjusted Return"
+                  valueClassName="text-accent"
                 />
                 <MetricCard 
                   title="95% Daily VaR" 
                   value={`${((results.metrics?.var_95 || 0) * 100).toFixed(2)}%`} 
                   icon={<ShieldAlert className="text-orange-500" />} 
                   trend="Probable Tail Risk"
+                  valueClassName="text-orange-500"
                 />
              </div>
 

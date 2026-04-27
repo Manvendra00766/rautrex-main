@@ -309,12 +309,42 @@ export default function PortfolioLab() {
 
           <TabsContent value="manager" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
-              <MetricCard title="NAV" value={formatCurrency(summary.nav)} icon={<Wallet className="text-accent" />} />
-              <MetricCard title="Cash" value={formatCurrency(summary.cash)} icon={<DollarSign className="text-amber-400" />} />
-              <MetricCard title="Daily P&L" value={formatCurrency(summary.daily_pnl)} icon={summary.daily_pnl >= 0 ? <TrendingUp className="text-green-500" /> : <TrendingDown className="text-red-500" />} trend={formatPct(summary.daily_return_pct)} trendColor={summary.daily_pnl >= 0 ? "text-green-500" : "text-red-500"} />
-              <MetricCard title="Unrealized" value={formatCurrency(summary.unrealized_pnl)} icon={<TrendingUp className="text-cyan-400" />} />
-              <MetricCard title="Realized" value={formatCurrency(summary.realized_pnl_total || summary.realized_pnl || 0)} icon={<ArrowRightLeft className="text-purple-400" />} />
-              <MetricCard title="Holdings" value={summary.holdings_count.toString()} icon={<Layers className="text-white" />} />
+              <MetricCard 
+                title="NAV" 
+                value={formatCurrency(summary.nav)} 
+                icon={<Wallet className="text-accent" />} 
+              />
+              <MetricCard 
+                title="Cash Balance" 
+                value={formatCurrency(summary.cash)} 
+                icon={<DollarSign className="text-amber-400" />} 
+                valueClassName="text-amber-400"
+              />
+              <MetricCard 
+                title="Daily P&L" 
+                value={formatCurrency(Math.abs(summary.daily_pnl))} 
+                icon={summary.daily_pnl >= 0 ? <TrendingUp className="text-green-500" /> : <TrendingDown className="text-red-500" />} 
+                trend={formatPct(summary.daily_return_pct)} 
+                trendColor={summary.daily_pnl >= 0 ? "text-green-500" : "text-red-500"} 
+                valueClassName={summary.daily_pnl >= 0 ? "text-green-400" : "text-red-400"}
+              />
+              <MetricCard 
+                title="Unrealized P&L" 
+                value={formatCurrency(summary.unrealized_pnl)} 
+                icon={<TrendingUp className="text-cyan-400" />} 
+                valueClassName="text-cyan-400"
+              />
+              <MetricCard 
+                title="Realized P&L" 
+                value={formatCurrency(summary.realized_pnl_total || summary.realized_pnl || 0)} 
+                icon={<ArrowRightLeft className="text-purple-400" />} 
+                valueClassName="text-purple-400"
+              />
+              <MetricCard 
+                title="Holdings" 
+                value={summary.holdings_count.toString()} 
+                icon={<Layers className="text-white" />} 
+              />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -483,9 +513,9 @@ export default function PortfolioLab() {
                       </ResponsiveContainer>
                     </div>
                     <div className="xl:col-span-4 space-y-4">
-                      <MetricCard title="Expected Return" value={formatPct((optimizationResult.metrics?.return || 0) * 100)} icon={<TrendingUp className="text-green-400" />} />
-                      <MetricCard title="Volatility" value={formatPct((optimizationResult.metrics?.volatility || 0) * 100)} icon={<TrendingDown className="text-red-400" />} />
-                      <MetricCard title="Sharpe" value={(optimizationResult.metrics?.sharpe || 0).toFixed(2)} icon={<Activity className="text-accent" />} />
+                      <MetricCard title="Expected Return" value={formatPct((optimizationResult.metrics?.return || 0) * 100)} icon={<TrendingUp className="text-green-400" />} valueClassName="text-green-400" />
+                      <MetricCard title="Volatility" value={formatPct((optimizationResult.metrics?.volatility || 0) * 100)} icon={<TrendingDown className="text-red-400" />} valueClassName="text-red-400" />
+                      <MetricCard title="Sharpe Ratio" value={(optimizationResult.metrics?.sharpe || 0).toFixed(2)} icon={<Activity className="text-accent" />} />
                       <div className="glass-panel p-4 rounded-xl bg-surface border border-white/5 space-y-3">
                         {optimizedWeights.map((weight, index: number) => (
                           <div key={weight.ticker} className="flex justify-between items-center text-xs font-mono">
@@ -545,7 +575,7 @@ export default function PortfolioLab() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <MetricCard title="Total Value" value={formatCurrency(rebalanceResult.total_value || 0)} icon={<Wallet className="text-accent" />} />
                       <MetricCard title="Trades Needed" value={String((rebalanceResult.trades || []).length)} icon={<ArrowRightLeft className="text-white" />} />
-                      <MetricCard title="Estimated Cost" value={formatCurrency(rebalanceResult.total_estimated_cost || 0)} icon={<DollarSign className="text-amber-400" />} />
+                      <MetricCard title="Estimated Cost" value={formatCurrency(rebalanceResult.total_estimated_cost || 0)} icon={<DollarSign className="text-amber-400" />} valueClassName="text-amber-400" />
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse font-mono text-sm">

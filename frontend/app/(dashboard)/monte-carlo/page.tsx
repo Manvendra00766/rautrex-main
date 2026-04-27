@@ -169,26 +169,26 @@ export default function MonteCarloPage() {
                 <MetricCard 
                   title="Expected Value" 
                   value={`$${(results.expected_value || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}`} 
-                  icon={null} 
                   trend={`${(((results.expected_value || investment)/investment - 1)*100).toFixed(1)}% Return`}
+                  trendColor={((results.expected_value || investment)/investment - 1) >= 0 ? "text-green-400" : "text-red-400"}
                 />
                 <MetricCard 
                   title="Value at Risk (95%)" 
                   value={`$${(results.var || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}`} 
-                  icon={null} 
                   trend="Max Probable Loss"
+                  valueClassName="text-orange-400"
                 />
                 <MetricCard 
                   title="Prob. of Profit" 
                   value={`${(results.prob_profit || 0).toFixed(1)}%`} 
-                  icon={null} 
                   trend="Likelihood of Upside"
+                  valueClassName="text-accent"
                 />
                 <MetricCard 
                   title="Annual Volatility" 
                   value={`${((results.volatility || 0) * 100).toFixed(1)}%`} 
-                  icon={null} 
                   trend="Historical Std Dev"
+                  valueClassName="text-red-400"
                 />
             </div>
 

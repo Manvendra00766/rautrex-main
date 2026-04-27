@@ -237,26 +237,26 @@ export default function BacktestPage() {
              <MetricCard 
                title="Total Return" 
                value={`${((results.metrics.strategy?.total_return || 0) * 100).toFixed(2)}%`} 
-               icon={null} 
                trend={`BnH: ${((results.metrics.benchmark?.total_return || 0) * 100).toFixed(2)}%`} 
+               valueClassName="text-green-400"
              />
              <MetricCard 
                title="CAGR" 
                value={`${((results.metrics.strategy?.cagr || 0) * 100).toFixed(2)}%`} 
-               icon={null} 
                trend={`BnH: ${((results.metrics.benchmark?.cagr || 0) * 100).toFixed(2)}%`} 
+               valueClassName="text-accent"
              />
              <MetricCard 
                title="Max Drawdown" 
                value={`${((results.metrics.strategy?.max_drawdown || 0) * 100).toFixed(2)}%`} 
-               icon={null} 
                trend={`BnH: ${((results.metrics.benchmark?.max_drawdown || 0) * 100).toFixed(2)}%`} 
+               valueClassName="text-red-400"
              />
              <MetricCard 
                title="Sharpe Ratio" 
                value={(results.metrics.strategy?.sharpe_ratio || 0).toFixed(2)} 
-               icon={null} 
                trend={`BnH: ${(results.metrics.benchmark?.sharpe_ratio || 0).toFixed(2)}`} 
+               valueClassName="text-white"
              />
             </div>
 
