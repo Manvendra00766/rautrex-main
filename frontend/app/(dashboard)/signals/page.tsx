@@ -210,7 +210,7 @@ export default function SignalsPage() {
 
           {!loading && !result && !error && (
             <div className="flex items-center justify-center h-32 border border-dashed border-white/10 rounded-xl">
-               <span className="text-sm text-gray-500">Configure parameters and click "RUN AI PIPELINE" to begin</span>
+               <span className="text-sm text-gray-500">Configure parameters and click &quot;RUN AI PIPELINE&quot; to begin</span>
             </div>
           )}
           
@@ -389,7 +389,7 @@ export default function SignalsPage() {
                        <p className="text-2xl font-mono font-bold text-white">{(result.risk_assessment?.risk_reward_ratio || 0).toFixed(2)}</p>
                     </div>
                     <div className="col-span-2 p-4 rounded-xl bg-accent/5 border border-accent/10">
-                       <p className="text-xs text-gray-400 italic">"Model suggests a {result.risk_assessment?.volatility || "normal"} volatility regime with {(result.risk_assessment?.suggested_position_size_pct || 0).toFixed(1)}% capital allocation and {(result.risk_assessment?.reward_target_pct || 0).toFixed(1)}% reward target."</p>
+                       <p className="text-xs text-gray-400 italic">&quot;Model suggests a {result.risk_assessment?.volatility || "normal"} volatility regime with {(result.risk_assessment?.suggested_position_size_pct || 0).toFixed(1)}% capital allocation and {(result.risk_assessment?.reward_target_pct || 0).toFixed(1)}% reward target.&quot;</p>
                     </div>
                  </div>
               </div>
