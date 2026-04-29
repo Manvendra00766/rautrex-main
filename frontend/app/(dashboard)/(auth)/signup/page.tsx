@@ -67,14 +67,18 @@ export default function SignupPage() {
     const trimmedEmail = email.trim()
     const trimmedPassword = password.trim()
 
-    const { error } = await supabase.auth.signUp({
+    // Use environment variable for production, fallback to window.location.origin for local dev
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+    const redirectTo = `${siteUrl}/auth/callback`
+
+    const { data, error } = await supabase.auth.signUp({
       email: trimmedEmail,
       password: trimmedPassword,
       options: {
         data: {
           full_name: fullName,
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: redirectTo,
       },
     })
 
@@ -82,8 +86,15 @@ export default function SignupPage() {
       setError(error.message)
       setIsLoading(false)
     } else {
-      setSuccess(true)
-      setIsLoading(false)
+      // If user exists but is unconfirmed, Supabase might not return an error 
+      // but identities will be empty if "Allow Unconfirmed Logins" is off.
+      if (data.user && data.user.identities?.length === 0) {
+        setError("This email is already registered. Try logging in or resetting your password.")
+        setIsLoading(false)
+      } else {
+        setSuccess(true)
+        setIsLoading(false)
+      }
     }
   }
 
