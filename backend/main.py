@@ -11,11 +11,19 @@ from contextlib import asynccontextmanager
 
 class JSONSanitizerMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Skip middleware for streaming endpoints to avoid breaking them
+        if request.url.path.endswith("/predict"):
+             return await call_next(request)
+
         response = await call_next(request)
         
         # Only process JSON responses
         content_type = response.headers.get("content-type", "")
         if "application/json" in content_type:
+            # We must NOT modify the response if it's already a StreamingResponse 
+            # as it would require consuming the whole stream here.
+            # BaseHTTPMiddleware already has issues with this.
+            
             body = b""
             async for chunk in response.body_iterator:
                 body += chunk
@@ -26,19 +34,29 @@ class JSONSanitizerMiddleware(BaseHTTPMiddleware):
                 sanitized_data = safe_json(data)
                 new_content = json.dumps(sanitized_data).encode("utf-8")
                 
+                # IMPORTANT: Remove old Content-Length to allow Response to recalculate it
+                headers = dict(response.headers)
+                old_len = headers.pop("content-length", None)
+                new_len = str(len(new_content))
+                
+                print(f"Middleware Sanitizer: Path={request.url.path}, Old-Length={old_len}, New-Length={new_len}")
+                
                 # Create new response with sanitized content
                 return Response(
                     content=new_content,
                     status_code=response.status_code,
-                    headers=dict(response.headers),
+                    headers=headers,
                     media_type="application/json"
                 )
             except Exception as e:
-                # If parsing fails, return original body (it might already be sanitized or not JSON)
+                # If parsing fails, return original body
+                headers = dict(response.headers)
+                headers.pop("content-length", None)
+                print(f"Middleware Sanitizer: Parse Failure on {request.url.path}, reverting to original body")
                 return Response(
                     content=body,
                     status_code=response.status_code,
-                    headers=dict(response.headers),
+                    headers=headers,
                     media_type="application/json"
                 )
         

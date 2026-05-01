@@ -46,7 +46,7 @@ async def update_my_profile(profile: ProfileUpdate, current_user = Depends(get_c
 @router.get("/me/portfolios")
 async def get_my_portfolios(current_user = Depends(get_current_user)):
     response = await db_service.get_portfolios(current_user.id)
-    return response.data
+    return JSONResponse(content=safe_json(response.data))
 
 @router.post("/me/portfolios")
 async def create_my_portfolio(portfolio: PortfolioCreate, current_user = Depends(get_current_user)):
