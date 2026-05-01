@@ -4,7 +4,7 @@ import yfinance as yf
 import asyncio
 from typing import Dict, Any, List
 import math
-from utils import clean_nans
+from utils import safe_json
 
 def calculate_drawdown(equity_curve: pd.Series) -> pd.Series:
     if equity_curve.empty:
@@ -497,4 +497,4 @@ def _backtest_sync(ticker, start_date, end_date, strategy_type, strategy_params,
         "heatmap": heatmap_data
     }
     
-    return clean_nans(res)
+    return safe_json(res)

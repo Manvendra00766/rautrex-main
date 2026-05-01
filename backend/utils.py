@@ -1,34 +1,108 @@
 import numpy as np
 import pandas as pd
-from typing import Any
+from typing import Any, List, Dict
+import math
+import logging
+from datetime import datetime, date
 
-def clean_nans(obj: Any) -> Any:
+logger = logging.getLogger(__name__)
+
+def safe_json(obj: Any, seen=None) -> Any:
     """
-    Recursively replaces NaN and Inf values with None (JSON null) to ensure JSON compliance.
+    Recursively replaces NaN and Inf values with 0 (JSON safe) to ensure JSON compliance.
+    Converts np.float64 and other numpy types to native Python types.
     Handles nested dicts, lists, numpy types, and pandas objects.
+    Logs when NaN is detected.
     """
     if obj is None:
         return None
         
+    if seen is None:
+        seen = set()
+        
+    # Prevent circular references
+    obj_id = id(obj)
+    if obj_id in seen:
+        return None
+    
+    if isinstance(obj, (dict, list)):
+        seen.add(obj_id)
+
     if isinstance(obj, dict):
-        return {k: clean_nans(v) for k, v in obj.items()}
+        return {str(k): safe_json(v, seen) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [clean_nans(x) for x in obj]
-    elif isinstance(obj, (float, np.float32, np.float64)):
-        if np.isnan(obj) or np.isinf(obj):
-            return 0.0 # Return 0.0 instead of None for financial metrics usually
+        return [safe_json(x, seen) for x in obj]
+    elif isinstance(obj, (float, np.floating)):
+        if math.isnan(obj) or math.isinf(obj):
+            logger.warning(f"NaN or Inf detected and replaced with 0.0")
+            print("NaN detected in portfolio response")
+            return 0.0
         return float(obj)
-    elif isinstance(obj, (int, np.int32, np.int64)):
+    elif isinstance(obj, (int, np.integer)):
         return int(obj)
+    elif isinstance(obj, (bool, np.bool_)):
+        return bool(obj)
+    elif isinstance(obj, (str, bytes)):
+        return str(obj)
+    elif isinstance(obj, (datetime, date)):
+        return obj.isoformat()
     elif isinstance(obj, np.ndarray):
-        return [clean_nans(x) for x in obj.tolist()]
+        return [safe_json(x, seen) for x in obj.tolist()]
     elif isinstance(obj, (pd.Series, pd.DataFrame)):
-        return clean_nans(obj.to_dict('records')) if isinstance(obj, pd.DataFrame) else clean_nans(obj.to_dict())
-    elif hasattr(obj, 'item'): # Handle other numpy scalars
+        return safe_json(obj.to_dict('records') if isinstance(obj, pd.DataFrame) else obj.to_dict(), seen)
+    elif hasattr(obj, 'item') and callable(getattr(obj, 'item')):
         try:
-            val = obj.item()
-            return clean_nans(val)
-        except:
+            return safe_json(obj.item(), seen)
+        except Exception:
             return str(obj)
             
-    return obj
+    return str(obj) if obj is not None else None
+
+
+def normalize_history(history: List[Any]) -> List[Dict[str, Any]]:
+    """
+    Normalizes a history list where items might be tuples (date, value) or dicts.
+    Returns a standardized list of dicts: [{"date": "YYYY-MM-DD", "nav": value}, ...]
+    Skips invalid rows safely. Rejects complex objects like tuples/lists used as dates.
+    """
+    normalized = []
+    if not isinstance(history, list):
+        return normalized
+
+    for item in history:
+        try:
+            if isinstance(item, tuple) and len(item) == 2:
+                raw_date, nav_val = item
+                
+                # REJECT if raw_date is not a "date-like" string or object
+                if isinstance(raw_date, (list, tuple, dict)):
+                    continue
+                    
+                date_val = pd.to_datetime(raw_date, errors='coerce', format='ISO8601')
+                if date_val is None or pd.isna(date_val) or isinstance(date_val, (pd.Index, pd.Series, np.ndarray)):
+                    continue
+                    
+                normalized.append({
+                    "date": date_val.strftime('%Y-%m-%d'),
+                    "nav": float(nav_val)
+                })
+            elif isinstance(item, dict):
+                raw_date = item.get("date") or item.get("snapshot_date")
+                nav_val = item.get("nav") or item.get("value") or 0.0
+                
+                if isinstance(raw_date, (list, tuple, dict)):
+                    continue
+                    
+                date_val = pd.to_datetime(raw_date, errors='coerce', format='ISO8601')
+                if date_val is None or pd.isna(date_val) or isinstance(date_val, (pd.Index, pd.Series, np.ndarray)):
+                    continue
+                    
+                new_item = dict(item)
+                new_item["date"] = date_val.strftime('%Y-%m-%d')
+                new_item["nav"] = float(nav_val)
+                normalized.append(new_item)
+        except Exception:
+            # Silent skip for invalid data during normalization
+            continue
+
+    return normalized

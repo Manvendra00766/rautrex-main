@@ -1,6 +1,8 @@
 export interface PortfolioRecord {
   id: string
   name: string
+  strategy?: string | null
+  cash_balance?: number
   description?: string | null
   base_currency?: string
   benchmark_symbol?: string

@@ -8,7 +8,7 @@ import pandas as pd
 import yfinance as yf
 
 from services.pricing_engine import get_batch_price_snapshots, get_price_snapshot, get_quote_payload, normalize_symbol
-from utils import clean_nans
+from utils import safe_json
 
 
 LIQUID_UNIVERSE = [
@@ -112,7 +112,7 @@ async def search_tickers(query: str, exchange: str = "all"):
 
 
 async def get_quote(ticker: str):
-    return clean_nans(await get_quote_payload(ticker))
+    return safe_json(await get_quote_payload(ticker))
 
 
 async def get_history(ticker: str, period: str):
@@ -124,7 +124,7 @@ async def get_history(ticker: str, period: str):
             return []
         return _series_to_chart(history)
 
-    return clean_nans(await loop.run_in_executor(None, _fetch))
+    return safe_json(await loop.run_in_executor(None, _fetch))
 
 
 async def get_fundamentals(ticker: str):
@@ -147,7 +147,7 @@ async def get_fundamentals(ticker: str):
             "beta": info.get("beta"),
         }
 
-    return clean_nans(await loop.run_in_executor(None, _fetch))
+    return safe_json(await loop.run_in_executor(None, _fetch))
 
 
 async def get_news(ticker: str):
@@ -170,7 +170,7 @@ async def get_news(ticker: str):
             )
         return rows
 
-    return clean_nans(await loop.run_in_executor(None, _fetch))
+    return safe_json(await loop.run_in_executor(None, _fetch))
 
 
 async def get_info(ticker: str):
@@ -192,7 +192,7 @@ async def get_info(ticker: str):
             "currency": quote.currency,
         }
 
-    return clean_nans(await loop.run_in_executor(None, _fetch))
+    return safe_json(await loop.run_in_executor(None, _fetch))
 
 
 async def get_indices():
@@ -211,7 +211,7 @@ async def get_indices():
                 "market_cap": snapshot.market_cap,
             }
         )
-    return clean_nans(rows)
+    return safe_json(rows)
 
 
 async def get_movers():
@@ -231,7 +231,7 @@ async def get_movers():
 
     sorted_rows = sorted(rows, key=lambda row: row["change_percent"], reverse=True)
     most_active = sorted(rows, key=lambda row: row.get("volume") or 0, reverse=True)
-    return clean_nans(
+    return safe_json(
         {
             "gainers": sorted_rows[:5],
             "losers": list(reversed(sorted_rows[-5:])),
@@ -258,4 +258,4 @@ async def run_screener():
             }
         )
     rows.sort(key=lambda row: ((row.get("market_cap") or 0), (row.get("volume") or 0)), reverse=True)
-    return clean_nans(rows[:10])
+    return safe_json(rows[:10])

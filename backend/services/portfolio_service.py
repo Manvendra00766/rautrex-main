@@ -4,7 +4,7 @@ import yfinance as yf
 from scipy.optimize import minimize
 import asyncio
 from typing import List, Dict, Any, Optional
-from utils import clean_nans
+from utils import safe_json
 
 # --- CORE MATH UTILS ---
 
@@ -204,7 +204,7 @@ def _optimize(tickers, method, objective, constraints_data, risk_free_rate):
         "frontier": frontier,
         "random_portfolios": random_portfolios
     }
-    return clean_nans(res)
+    return safe_json(res)
 
 async def get_correlation_matrix(tickers: List[str]):
     loop = asyncio.get_event_loop()
@@ -217,7 +217,7 @@ async def get_correlation_matrix(tickers: List[str]):
         for i, t1 in enumerate(returns.columns):
             for j, t2 in enumerate(returns.columns):
                 res.append({"x": t1, "y": t2, "v": float(corr.iloc[i, j])})
-        return clean_nans(res)
+        return safe_json(res)
     return await loop.run_in_executor(None, _calc)
 
 # --- REBALANCING ---
@@ -293,7 +293,7 @@ async def calculate_rebalance(
             else:
                 post_rebalance_weights[t] = curr_w
                 
-        return clean_nans({
+        return safe_json({
             "current_weights": current_weights,
             "target_weights": target_weights,
             "post_rebalance_weights": post_rebalance_weights,
@@ -398,5 +398,5 @@ async def backtest_rebalance(
                 for d, v1, v2 in zip(returns.index[::max(1, len(returns)//100)], portfolio_no_reb[::max(1, len(returns)//100)], portfolio_reb[::max(1, len(returns)//100)])
             ]
         }
-        return clean_nans(res)
+        return safe_json(res)
     return await loop.run_in_executor(None, _calc)

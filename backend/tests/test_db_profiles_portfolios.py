@@ -100,15 +100,17 @@ async def test_get_portfolios_includes_positions(mock_sb):
 async def test_create_portfolio_inserts_correct_fields(mock_sb):
     user_id = "u1"
     name = "Growth Portfolio"
+    strategy = "Equity"
     desc = "High risk strategy"
-    mock_sb.table.return_value.insert.return_value.execute.return_value = make_supabase_response({})
+    mock_sb.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = make_supabase_response([])
+    mock_sb.table.return_value.insert.return_value.execute.return_value = make_supabase_response([{"id": "p1"}])
     
-    await db_service.create_portfolio(user_id, name, desc)
+    await db_service.create_portfolio(user_id, name, strategy, 0, desc)
     
     mock_sb.table().insert.assert_called_with({
         "user_id": user_id,
         "name": name,
-        "description": desc
+        "is_default": True
     })
 
 @pytest.mark.asyncio

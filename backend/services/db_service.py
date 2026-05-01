@@ -16,33 +16,37 @@ async def update_profile(user_id: str, data: dict):
 async def get_portfolios(user_id: str):
     return supabase.table("portfolios").select("*, portfolio_positions(*)").eq("user_id", user_id).execute()
 
-async def create_portfolio(user_id: str, name: str, description: str = None):
+async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", cash_balance: float = 0, description: str = None):
     existing = supabase.table("portfolios").select("id").eq("user_id", user_id).limit(1).execute()
     is_default = not bool(existing.data)
+    # Note: strategy, description, and cash_balance are omitted here to ensure compatibility 
+    # with the current schema. cash_balance is handled via a DEPOSIT transaction in the router.
     return supabase.table("portfolios").insert({
         "user_id": user_id, 
         "name": name, 
-        "description": description,
         "is_default": is_default,
     }).execute()
 
 async def delete_portfolio(portfolio_id: str, user_id: str):
     return supabase.table("portfolios").delete().eq("id", portfolio_id).eq("user_id", user_id).execute()
 
-async def add_position(portfolio_id: str, ticker: str, exchange: str, shares: float, avg_cost: float):
+async def add_position(portfolio_id: str, ticker: str, exchange: str, shares: float, avg_cost_price: float):
    if shares <= 0:
        raise ValueError("Shares must be positive")
-   if avg_cost <= 0:
+   if avg_cost_price <= 0:
        raise ValueError("Average cost price must be positive")
-   if avg_cost > 100000:
-       raise ValueError("avg_cost_price must be per share price, not total value")
+   if avg_cost_price > 100000:
+       raise ValueError("avg_cost must be per share price, not total value")
 
-   return supabase.table("portfolio_positions").insert({        "portfolio_id": portfolio_id, 
+   return supabase.table("portfolio_positions").insert({        
+        "portfolio_id": portfolio_id, 
         "ticker": ticker.upper(),
-        "exchange": exchange, 
+        "exchange": exchange.upper(),
         "shares": shares, 
-        "avg_cost_price": avg_cost
+        "avg_cost_price": avg_cost_price,
     }).execute()
+
+
 
 # --- WATCHLISTS ---
 
@@ -69,7 +73,7 @@ async def get_watchlist_items(watchlist_id: str):
     return supabase.table("watchlist_items") \
         .select("*") \
         .eq("watchlist_id", watchlist_id) \
-        .order("added_at", desc=False) \
+        .order("added_at", ascending=True) \
         .execute()
 
 # --- BACKTESTS ---
@@ -124,8 +128,8 @@ async def create_notification(user_id: str, type: str, title: str, body: str, me
 async def get_notifications(user_id: str, limit: int = 20, offset: int = 0):
     return supabase.table("notifications").select("*") \
         .eq("user_id", user_id) \
-        .order("is_read", desc=False) \
-        .order("created_at", desc=True) \
+        .order("is_read", ascending=True) \
+        .order("created_at", ascending=False) \
         .range(offset, offset + limit - 1).execute()
 
 async def get_unread_count(user_id: str):

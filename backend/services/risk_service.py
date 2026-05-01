@@ -6,7 +6,7 @@ from scipy.stats import norm
 import asyncio
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
-from utils import clean_nans
+from utils import safe_json
 
 # Helpers
 def _get_returns(tickers: List[str], start: str, end: str) -> pd.DataFrame:
@@ -219,7 +219,7 @@ async def calculate_portfolio_risk(
             "rolling_metrics": rolling_data,
             "drawdown_curve": dd_data
         }
-        return clean_nans(res)
+        return safe_json(res)
     return await loop.run_in_executor(None, _calc)
 
 # --- STRESS TESTING ---
@@ -285,7 +285,7 @@ async def run_stress_test(portfolio: List[Dict[str, Any]]) -> Dict[str, float]:
                 print(f"Stress test error for {name}: {e}")
                 results[name] = 0.0
                 
-        return clean_nans(results)
+        return safe_json(results)
     return await loop.run_in_executor(None, _calc)
 
 # --- FACTOR EXPOSURE ---
@@ -426,7 +426,7 @@ async def calculate_portfolio_factors(
                 "rolling_beta": rolling_beta,
                 "r_squared": float(r_squared)
             }
-            return clean_nans(res)
+            return safe_json(res)
         except Exception as e:
             print(f"Factor calculation error: {e}")
             return {}
@@ -598,5 +598,5 @@ async def run_scenarios(portfolio: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         except Exception as e:
             print(f"Hypothetical shock calculation error: {e}")
             
-        return clean_nans(results)
+        return safe_json(results)
     return await loop.run_in_executor(None, _calc)

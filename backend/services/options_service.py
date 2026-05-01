@@ -5,7 +5,7 @@ import yfinance as yf
 from typing import Dict, Any, List, Optional
 import asyncio
 from datetime import datetime
-from utils import clean_nans
+from utils import safe_json
 
 # --- OPTION PRICING MODELS ---
 
@@ -149,7 +149,7 @@ async def price_option(model: str, option_type: str, S: float, K: float, T: floa
             res = _black_scholes(S, K, T, r, np.sqrt(max(0.0001, v_avg)), option_type)
         else:
             res = _black_scholes(S, K, T, r, sigma, option_type)
-        return clean_nans(res)
+        return safe_json(res)
     return await loop.run_in_executor(None, _price)
 
 # --- OPTIONS CHAIN ---
@@ -170,7 +170,7 @@ async def fetch_options_chain(ticker: str):
             hist = tk.history(period="1d")
             spot = float(hist['Close'].iloc[-1]) if not hist.empty else 0.0
             
-            return clean_nans({
+            return safe_json({
                 "spot": spot,
                 "expirations": list(expirations),
                 "current_expiration": expirations[0],
@@ -196,7 +196,7 @@ async def calculate_strategy_pnl(name: str, spot: float, legs: List[Dict]):
             else: payoff = s_range - K
             pnl += pos * (payoff - prem)
         
-        return clean_nans({
+        return safe_json({
             "strategy": name,
             "chart_data": [{"underlying": float(s), "pnl": float(p)} for s, p in zip(s_range, pnl)],
             "max_profit": float(np.max(pnl)), "max_loss": float(np.min(pnl))
@@ -240,7 +240,7 @@ async def generate_iv_surface(ticker: str):
                     row.append(float(match['iv'].iloc[0]) if not match.empty else 0.0)
                 grid.append(row)
                 
-            return clean_nans({
+            return safe_json({
                 "iv_surface": {"strikes": z_strikes, "expiries": [int(y*365) for y in y_exps], "iv_grid": grid}
             })
         except Exception as e:

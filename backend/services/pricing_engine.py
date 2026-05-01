@@ -148,11 +148,16 @@ async def upsert_cached_price(snapshot: PriceSnapshot) -> None:
         return
 
 
-def _fetch_quote_sync(symbol: str) -> PriceSnapshot:
+def _fetch_quote_sync(symbol: str) -> Optional[PriceSnapshot]:
     ticker = yf.Ticker(symbol)
-    history = ticker.history(period="5d", auto_adjust=False)
-    if history.empty:
-        raise ValueError(f"No market data found for {symbol}")
+    try:
+        history = ticker.history(period="5d", auto_adjust=False)
+        if history.empty:
+            print(f"Warning: No market data found for {symbol}")
+            return None
+    except Exception as e:
+        print(f"Error fetching history for {symbol}: {e}")
+        return None
 
     info = {}
     try:
@@ -162,7 +167,9 @@ def _fetch_quote_sync(symbol: str) -> PriceSnapshot:
 
     closes = history["Close"].dropna()
     if closes.empty:
-        raise ValueError(f"No close data found for {symbol}")
+        print(f"Warning: No close data found for {symbol}")
+        return None
+
 
     last_price = float(closes.iloc[-1])
     previous_close = float(closes.iloc[-2]) if len(closes) > 1 else float(info.get("previousClose") or last_price)
@@ -194,7 +201,7 @@ def _fetch_quote_sync(symbol: str) -> PriceSnapshot:
     )
 
 
-async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_TTL_SECONDS) -> PriceSnapshot:
+async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_TTL_SECONDS) -> Optional[PriceSnapshot]:
     symbol = normalize_symbol(symbol)
     cached = await get_cached_price(symbol)
     if cached and (_utcnow() - cached.fetched_at).total_seconds() <= max_age_seconds:
@@ -203,21 +210,29 @@ async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_T
     loop = asyncio.get_event_loop()
     try:
         fresh = await loop.run_in_executor(None, _fetch_quote_sync, symbol)
-        await upsert_cached_price(fresh)
-        return fresh
+        if fresh:
+            await upsert_cached_price(fresh)
+            return fresh
+        return cached
     except Exception:
-        if cached:
-            return cached
-        raise
+        return cached
 
 
 async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int = DEFAULT_CACHE_TTL_SECONDS) -> Dict[str, PriceSnapshot]:
     normalized = [normalize_symbol(symbol) for symbol in symbols if symbol]
     unique_symbols = list(dict.fromkeys(normalized))
-    snapshots = await asyncio.gather(
-        *[get_price_snapshot(symbol, max_age_seconds=max_age_seconds) for symbol in unique_symbols]
+    results = await asyncio.gather(
+        *[get_price_snapshot(symbol, max_age_seconds=max_age_seconds) for symbol in unique_symbols],
+        return_exceptions=True
     )
-    return {snapshot.symbol: snapshot for snapshot in snapshots}
+
+    mapping: Dict[str, PriceSnapshot] = {}
+    for symbol, res in zip(unique_symbols, results):
+        if isinstance(res, PriceSnapshot):
+            mapping[symbol] = res
+
+    return mapping
+
 
 
 def _download_history_sync(symbols: List[str], start: str, end: str) -> Dict[str, pd.Series]:

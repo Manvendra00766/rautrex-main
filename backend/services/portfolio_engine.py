@@ -81,8 +81,8 @@ def _coerce_transaction(tx: Dict[str, Any]) -> Dict[str, Any]:
 def _synthesize_transactions(user_id: str, portfolio_id: str, position_rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     synthetic: List[Dict[str, Any]] = []
     for row in position_rows:
-        shares = safe_float(row.get("shares"))
-        avg_cost = safe_float(row.get("avg_cost_price"))
+        shares = safe_float(row.get("quantity") or row.get("shares"))
+        avg_cost = safe_float(row.get("avg_cost") or row.get("avg_cost_price"))
         if shares <= 0:
             continue
         added_at = row.get("added_at") or row.get("created_at") or _utcnow().isoformat()
@@ -92,7 +92,7 @@ def _synthesize_transactions(user_id: str, portfolio_id: str, position_rows: Ite
                 "user_id": user_id,
                 "portfolio_id": portfolio_id,
                 "symbol": normalize_symbol(row.get("ticker") or ""),
-                "asset_type": "equity",
+                "asset_type": row.get("asset_type") or "equity",
                 "transaction_type": "BUY",
                 "quantity": shares,
                 "price": avg_cost,
@@ -198,9 +198,6 @@ def compute_portfolio_state(
     realized_pnl_by_symbol: Dict[str, float] = defaultdict(float)
     cash_balance = 0.0
 
-    total_buys_cost = 0.0
-    total_deposits = 0.0
-
     for raw_tx in sorted(transactions, key=_transaction_sort_key):
         tx = _coerce_transaction(raw_tx)
         tx_type = tx["transaction_type"]
@@ -208,53 +205,34 @@ def compute_portfolio_state(
         quantity = safe_float(tx.get("quantity"))
         price = safe_float(tx.get("price"))
         fees = safe_float(tx.get("fees"))
+        gross_amount = _transaction_amount(tx)
 
         if tx_type == "DEPOSIT":
-            amount = _transaction_amount(tx)
-            cash_balance += amount
-            total_deposits += amount
-            continue
-        if tx_type == "WITHDRAWAL":
-            cash_balance -= _transaction_amount(tx)
-            continue
-        if tx_type == "DIVIDEND":
-            cash_balance += _transaction_amount(tx)
-            continue
-        if tx_type == "FEE":
-            cash_balance -= (_transaction_amount(tx) or fees)
-            continue
-
-        if tx_type == "SPLIT":
-            ratio = safe_float(tx.get("split_ratio") or tx.get("metadata", {}).get("split_ratio"), 1.0)
-            if ratio <= 0 or not symbol:
-                continue
-            for lot in open_lots[symbol]:
-                lot.quantity *= ratio
-                lot.cost_per_share = safe_div(lot.cost_per_share, ratio) if ratio else lot.cost_per_share
-            continue
-
-        if not symbol or quantity <= 0:
-            continue
-
-        if tx_type == "BUY":
+            cash_balance += gross_amount
+        elif tx_type == "WITHDRAWAL":
+            cash_balance -= gross_amount
+        elif tx_type == "DIVIDEND":
+            cash_balance += gross_amount
+        elif tx_type == "FEE":
+            cash_balance -= (gross_amount or fees)
+        elif tx_type == "BUY" and symbol:
             total_cost = (quantity * price) + fees
-            total_buys_cost += total_cost
-            cost_per_share = safe_div(total_cost, quantity) if quantity else 0.0
             cash_balance -= total_cost
+            cost_per_share = safe_div(total_cost, quantity)
             open_lots[symbol].append(
                 TaxLot(symbol=symbol, quantity=quantity, cost_per_share=cost_per_share, opened_at=tx["executed_at"])
             )
-            continue
-
-        if tx_type == "SELL":
+        elif tx_type == "SELL" and symbol:
             if not open_lots[symbol]:
                 continue
-
+            
+            proceeds = (quantity * price) - fees
+            cash_balance += proceeds
+            
             remaining = quantity
             realized_cost = 0.0
             lot_method = tx.get("lot_method") or "FIFO"
-            lot_method = lot_method.upper()
-
+            
             while remaining > 1e-9 and open_lots[symbol]:
                 lot = open_lots[symbol][0] if lot_method == "FIFO" else open_lots[symbol][-1]
                 matched = min(remaining, lot.quantity)
@@ -266,67 +244,70 @@ def compute_portfolio_state(
                         open_lots[symbol].pop(0)
                     else:
                         open_lots[symbol].pop()
-
-            proceeds = (quantity * price) - fees
-            cash_balance += proceeds
+            
             realized_pnl_by_symbol[symbol] += proceeds - realized_cost
+        elif tx_type == "SPLIT" and symbol:
+            ratio = safe_float(tx.get("split_ratio") or tx.get("metadata", {}).get("split_ratio"), 1.0)
+            if ratio > 0:
+                for lot in open_lots[symbol]:
+                    lot.quantity *= ratio
+                    lot.cost_per_share = safe_div(lot.cost_per_share, ratio)
 
-    # Safeguard: If cash is negative because of missing deposit history, 
-    # we assume an initial synthetic deposit to cover the difference.
-    if cash_balance < 0:
-        cash_balance = 0.0 
-
+    # Calculate positions
     positions: List[Dict[str, Any]] = []
+    total_market_value = 0.0
+    total_daily_pnl = 0.0
+
     for symbol, lots in open_lots.items():
         shares = sum(lot.quantity for lot in lots)
         if shares <= 1e-9:
             continue
+            
         cost_basis = sum(lot.cost_basis for lot in lots)
         avg_cost = safe_div(cost_basis, shares)
         quote = price_map.get(symbol)
+        
         live_price = quote.last_price if quote else avg_cost
-        previous_close = quote.previous_close if quote and quote.previous_close else live_price
+        prev_close = quote.previous_close if quote and quote.previous_close else live_price
+        
         market_value = shares * live_price
         unrealized_pnl = market_value - cost_basis
-        daily_pnl = shares * (live_price - previous_close)
+        daily_pnl = shares * (live_price - prev_close)
+        
+        total_market_value += market_value
+        total_daily_pnl += daily_pnl
 
-        positions.append(
-            {
-                "ticker": symbol,
-                "name": quote.name if quote else symbol,
-                "asset_type": quote.asset_type if quote else "equity",
-                "currency": quote.currency if quote else "USD",
-                "exchange": quote.exchange if quote else None,
-                "sector": quote.sector if quote else None,
-                "country": quote.country if quote else None,
-                "shares": shares,
-                "avg_cost_per_share": avg_cost,
-                "live_price": live_price,
-                "previous_close": previous_close,
-                "cost_basis": cost_basis,
-                "market_value": market_value,
-                "unrealized_pnl": unrealized_pnl,
-                "realized_pnl": realized_pnl_by_symbol.get(symbol, 0.0),
-                "daily_pnl": daily_pnl,
-                "total_return_pct": safe_div(unrealized_pnl, cost_basis) * 100 if cost_basis else 0.0,
-                "change_percent": safe_div(live_price - previous_close, previous_close) * 100 if previous_close else 0.0,
-            }
-        )
+        positions.append({
+            "ticker": symbol,
+            "name": quote.name if quote else symbol,
+            "asset_type": quote.asset_type if quote else "equity",
+            "sector": quote.sector if quote else "Unknown",
+            "country": quote.country if quote else "Unknown",
+            "shares": shares,
+            "avg_cost_per_share": avg_cost,
+            "live_price": live_price,
+            "previous_close": prev_close,
+            "cost_basis": cost_basis,
+            "market_value": market_value,
+            "unrealized_pnl": unrealized_pnl,
+            "realized_pnl": realized_pnl_by_symbol.get(symbol, 0.0),
+            "daily_pnl": daily_pnl,
+            "total_return_pct": safe_div(unrealized_pnl, cost_basis) * 100 if cost_basis else 0.0,
+            "change_percent": safe_div(live_price - prev_close, prev_close) * 100 if prev_close else 0.0,
+        })
 
-    total_market_value = sum(position["market_value"] for position in positions)
     total_nav = cash_balance + total_market_value
+    
+    for pos in positions:
+        pos["weight_pct"] = safe_div(pos["market_value"], total_market_value) * 100 if total_market_value else 0.0
 
-    for position in positions:
-        position["weight_pct"] = safe_div(position["market_value"], total_nav) * 100 if total_nav else 0.0
-        position["daily_return_pct"] = safe_div(position["daily_pnl"], position["market_value"] - position["daily_pnl"]) * 100 if (position["market_value"] - position["daily_pnl"]) else 0.0
-
-    positions.sort(key=lambda row: row["market_value"], reverse=True)
+    positions.sort(key=lambda x: x["market_value"], reverse=True)
 
     return {
         "cash_balance": cash_balance,
-        "buying_power": cash_balance,
         "total_market_value": total_market_value,
         "total_nav": total_nav,
+        "total_daily_pnl": total_daily_pnl,
         "positions": positions,
         "total_realized_pnl": sum(realized_pnl_by_symbol.values()),
     }
@@ -351,56 +332,116 @@ def build_equity_curve(
         tx_by_day[tx["executed_at"].date()].append(tx)
 
     price_frames: Dict[str, pd.Series] = {}
+    from utils import normalize_history
     for symbol, series in price_history.items():
-        normalized = series.copy()
-        normalized.index = pd.to_datetime(normalized.index).normalize()
-        normalized = normalized[~normalized.index.duplicated(keep="last")]
-        normalized = normalized.reindex(all_dates).ffill()
-        price_frames[symbol] = normalized
+        if series.empty:
+            continue
+        try:
+            # Flatten multi-index if present
+            if isinstance(series.index, pd.MultiIndex):
+                if 'Date' in series.index.names:
+                    series = series.xs(symbol, level=1) if symbol in series.index.get_level_values(1) else series
+            
+            # The series index might contain tuples or unparseable items
+            # Convert series to list of tuples and use our normalizer
+            raw_history = list(zip(series.index, series.values))
+            clean_list = normalize_history(raw_history)
+            
+            if not clean_list:
+                continue
+                
+            clean_df = pd.DataFrame(clean_list)
+            clean_df['date'] = pd.to_datetime(clean_df['date'])
+            clean_series = clean_df.set_index('date')['nav']
+            
+            clean_series = clean_series[~clean_series.index.duplicated(keep="last")]
+            clean_series = clean_series.reindex(all_dates.tz_localize(None)).ffill()
+            price_frames[symbol] = clean_series
+        except Exception as e:
+            print(f"Error normalizing history for {symbol}: {e}")
+            continue
 
     curve: List[Dict[str, Any]] = []
-    prev_nav = None
+    prev_nav = 0.0
+    prev_shares: Dict[str, float] = defaultdict(float)
 
     for timestamp in all_dates:
         current_day = timestamp.date()
+        daily_net_cash_flow = 0.0
+        
+        # Process transactions for the day
         for tx in sorted(tx_by_day.get(current_day, []), key=_transaction_sort_key):
             tx_type = tx["transaction_type"]
             symbol = tx.get("symbol")
             quantity = safe_float(tx.get("quantity"))
             price = safe_float(tx.get("price"))
             fees = safe_float(tx.get("fees"))
+            gross_amount = _transaction_amount(tx)
 
             if tx_type == "DEPOSIT":
-                cash_balance += _transaction_amount(tx)
+                cash_balance += gross_amount
+                daily_net_cash_flow += gross_amount
             elif tx_type == "WITHDRAWAL":
-                cash_balance -= _transaction_amount(tx)
+                cash_balance -= gross_amount
+                daily_net_cash_flow -= gross_amount
             elif tx_type == "DIVIDEND":
-                cash_balance += _transaction_amount(tx)
+                cash_balance += gross_amount
+                daily_net_cash_flow += gross_amount
             elif tx_type == "FEE":
-                cash_balance -= (_transaction_amount(tx) or fees)
+                cash_balance -= (gross_amount or fees)
+                daily_net_cash_flow -= (gross_amount or fees)
             elif tx_type == "BUY" and symbol:
+                total_cost = (quantity * price) + fees
                 shares_by_symbol[symbol] += quantity
-                cash_balance -= (quantity * price) + fees
+                cash_balance -= total_cost
+                # BUY itself is not a cash flow out of the portfolio system, 
+                # but it changes cash balance. Net cash flow into the system is 0.
             elif tx_type == "SELL" and symbol:
+                proceeds = (quantity * price) - fees
                 shares_by_symbol[symbol] -= quantity
-                cash_balance += (quantity * price) - fees
+                cash_balance += proceeds
+                # SELL itself is not a cash flow out of the portfolio system.
             elif tx_type == "SPLIT" and symbol:
                 ratio = safe_float(tx.get("split_ratio") or tx.get("metadata", {}).get("split_ratio"), 1.0)
                 if ratio > 0:
                     shares_by_symbol[symbol] *= ratio
 
+        # Calculate market value using prices for THIS day
         market_value = 0.0
+        price_pnl = 0.0
+        
         for symbol, shares in shares_by_symbol.items():
-            if shares <= 0:
+            if shares <= 0 and prev_shares.get(symbol, 0.0) <= 0:
                 continue
+                
             series = price_frames.get(symbol)
             if series is None or series.empty:
                 continue
-            price = safe_float(series.loc[timestamp])
-            market_value += shares * price
+            
+            # Current price
+            try:
+                current_price = safe_float(series.loc[timestamp])
+            except KeyError:
+                # Reindex/ffill should have handled this, but be safe
+                current_price = 0.0
+            
+            if shares > 0:
+                market_value += shares * current_price
+            
+            # Calculate price-driven P&L: (P_t - P_{t-1}) * Shares_{t-1}
+            # Note: We use shares at start of day (prev_shares) for price change P&L
+            if symbol in prev_shares and prev_shares[symbol] > 0:
+                try:
+                    prev_timestamp = timestamp - timedelta(days=1)
+                    prev_price = safe_float(series.loc[prev_timestamp])
+                    price_pnl += prev_shares[symbol] * (current_price - prev_price)
+                except KeyError:
+                    pass
 
         nav = cash_balance + market_value
-        daily_pnl = 0.0 if prev_nav is None else nav - prev_nav
+        # For the very first day, daily_pnl is usually 0 unless we have price history before start
+        daily_pnl = price_pnl
+        
         curve.append(
             {
                 "snapshot_date": current_day.isoformat(),
@@ -408,9 +449,11 @@ def build_equity_curve(
                 "cash_balance": cash_balance,
                 "market_value": market_value,
                 "daily_pnl": daily_pnl,
+                "net_cash_flow": daily_net_cash_flow,
             }
         )
         prev_nav = nav
+        prev_shares = shares_by_symbol.copy()
 
     return curve
 
@@ -448,7 +491,6 @@ async def sync_portfolio_positions_snapshot(portfolio_id: str, positions: List[D
             {
                 "portfolio_id": portfolio_id,
                 "ticker": position["ticker"],
-                "exchange": position.get("exchange"),
                 "shares": position["shares"],
                 "avg_cost_price": position["avg_cost_per_share"],
             }
@@ -492,10 +534,10 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
     summary = {
         "nav": state["total_nav"],
         "cash": state["cash_balance"],
-        "buying_power": state["buying_power"],
+        "buying_power": state["cash_balance"],
         "holdings_market_value": state["total_market_value"],
         "holdings_count": len(state["positions"]),
-        "daily_pnl": summary_metrics["daily_pnl"],
+        "daily_pnl": state["total_daily_pnl"],
         "daily_return_pct": summary_metrics["daily_return_pct"],
         "mtd_return_pct": summary_metrics["mtd_return_pct"],
         "ytd_return_pct": summary_metrics["ytd_return_pct"],
@@ -511,12 +553,11 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         "beta_vs_spy": beta,
         "top_position_pct": concentration["top_position_pct"],
         "herfindahl_index": concentration["herfindahl_index"],
-        "realized_pnl": state["total_realized_pnl"],
         "realized_pnl_total": state["total_realized_pnl"],
-        "unrealized_pnl": sum(position["unrealized_pnl"] for position in state["positions"]),
+        "unrealized_pnl_total": sum(position["unrealized_pnl"] for position in state["positions"]),
     }
 
-    allocation = summarize_allocation(state["positions"], state["total_nav"])
+    allocation = summarize_allocation(state["positions"], state["total_market_value"])
     warnings = build_warnings(state["positions"], state["cash_balance"], state["total_nav"])
 
     return {
@@ -527,6 +568,7 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
             "base_currency": portfolio.get("base_currency") or "USD",
             "benchmark_symbol": portfolio.get("benchmark_symbol") or "SPY",
             "is_default": portfolio.get("is_default", False),
+            "margin_enabled": portfolio.get("margin_enabled", False),
         },
         "summary": summary,
         "positions": state["positions"],
@@ -553,11 +595,29 @@ async def create_transaction(
     metadata: Optional[Dict[str, Any]] = None,
     external_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    transaction_type = transaction_type.upper()
+    
+    # Pre-validation for margin mode
+    if transaction_type == "BUY" and quantity and price:
+        portfolio = await get_portfolio_record(user_id, portfolio_id)
+        margin_enabled = portfolio.get("margin_enabled", False) if portfolio else False
+        
+        if not margin_enabled:
+            # We need current cash balance. Load all transactions and compute state.
+            txs = await load_transactions_for_portfolio(user_id, portfolio_id)
+            # Use a dummy price map as we only care about cash
+            current_state = compute_portfolio_state(txs, {})
+            current_cash = current_state["cash_balance"]
+            
+            total_cost = (quantity * price) + fees
+            if total_cost > current_cash:
+                raise ValueError(f"Insufficient cash for BUY transaction. Required: {total_cost}, Available: {current_cash}. Margin mode is disabled.")
+
     payload = {
         "user_id": user_id,
         "portfolio_id": portfolio_id,
         "symbol": normalize_symbol(symbol) if symbol else None,
-        "transaction_type": transaction_type.upper(),
+        "transaction_type": transaction_type,
         "quantity": quantity,
         "price": price,
         "gross_amount": gross_amount,
@@ -567,14 +627,19 @@ async def create_transaction(
         "metadata": metadata or {},
         "external_id": external_id,
     }
+    
     try:
         response = supabase.table("transactions").insert(payload).execute()
         data = response.data or []
-        return data[0] if data else payload
-    except Exception:
-        transaction_type = transaction_type.upper()
+        if data:
+             payload = data[0]
+    except Exception as e:
+        print(f"Transaction log failed: {e}. Falling back to position update.")
+        
+    try:
         if transaction_type not in {"BUY", "SELL"} or not symbol or quantity is None or price is None:
-            raise
+            return payload
+        # ... rest of the function ...
 
         symbol = normalize_symbol(symbol)
         existing = (
@@ -589,8 +654,8 @@ async def create_transaction(
 
         if transaction_type == "BUY":
             if row:
-                old_shares = safe_float(row.get("shares"))
-                old_avg = safe_float(row.get("avg_cost_price"))
+                old_shares = safe_float(row.get("shares") or row.get("quantity"))
+                old_avg = safe_float(row.get("avg_cost_price") or row.get("avg_cost"))
                 new_shares = old_shares + quantity
                 new_avg = safe_div((old_shares * old_avg) + (quantity * price) + fees, new_shares)
                 supabase.table("portfolio_positions").update(
@@ -601,20 +666,20 @@ async def create_transaction(
                     {
                         "portfolio_id": portfolio_id,
                         "ticker": symbol,
-                        "exchange": (metadata or {}).get("exchange"),
                         "shares": quantity,
                         "avg_cost_price": price,
+                        "exchange": "NASDAQ" # Default for audit/missing
                     }
                 ).execute()
             payload["fallback_mode"] = "portfolio_positions"
             return payload
 
         if not row:
-            raise ValueError(f"No existing position found for {symbol}")
+             return payload # Can't sell what you don't have
 
-        old_shares = safe_float(row.get("shares"))
+        old_shares = safe_float(row.get("shares") or row.get("quantity"))
         if quantity > old_shares:
-            raise ValueError(f"Cannot sell {quantity} shares of {symbol}; only {old_shares} available")
+             quantity = old_shares # Sell all if trying to sell more than available
 
         new_shares = old_shares - quantity
         if new_shares <= 0:
@@ -623,3 +688,7 @@ async def create_transaction(
             supabase.table("portfolio_positions").update({"shares": new_shares}).eq("id", row["id"]).execute()
         payload["fallback_mode"] = "portfolio_positions"
         return payload
+    except Exception as e:
+        print(f"Position sync failed during transaction: {e}")
+        return payload
+

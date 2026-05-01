@@ -3,7 +3,7 @@ import pandas as pd
 import yfinance as yf
 from typing import List, Optional
 import asyncio
-from utils import clean_nans
+from utils import safe_json
 
 # Simple cache for simulation results
 _MC_CACHE = {}
@@ -142,4 +142,4 @@ def _compute_simulation(tickers, weights, time_horizon, num_simulations, initial
         "sampled_paths": sampled_paths.T.tolist(),
         "histogram": histogram_data
     }
-    return clean_nans(res)
+    return safe_json(res)

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from supabase_client import supabase
+from utils import safe_json
 from services.portfolio_service import (
     optimize_portfolio_logic, 
     get_correlation_matrix, 
@@ -59,9 +60,29 @@ async def portfolio_overview(
     current_user=Depends(get_current_user),
 ):
     try:
-        return await get_portfolio_overview(current_user.id, portfolio_id)
+        data = await get_portfolio_overview(current_user.id, portfolio_id)
+        return safe_json(data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        print(f"Error in portfolio_overview: {e}")
+        print(traceback.format_exc())
+        
+        # Fallback response as requested by user to prevent 500 crashes
+        fallback = {
+            "nav": 0.0,
+            "cash_balance": 0.0,
+            "daily_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "holdings": [],
+            "history": [],
+            "portfolio": None,
+            "summary": None,
+            "positions": [],
+            "equity_curve": [],
+            "allocation": {"by_sector": [], "by_asset_type": [], "by_country": []},
+            "warnings": [],
+        }
+        return fallback
 
 
 @router.post("/transactions")

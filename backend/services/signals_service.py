@@ -17,7 +17,7 @@ import xgboost as xgb
 from arch import arch_model
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import ta
-from utils import clean_nans
+from utils import safe_json
 
 CACHE_DIR = "models_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -207,7 +207,7 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
         if ticker in _TRAINING_RESULTS:
             last_res, timestamp = _TRAINING_RESULTS[ticker]
             if datetime.now() - timestamp < timedelta(minutes=30):
-                yield f"data: {json.dumps(clean_nans(last_res))}\n\n"
+                yield f"data: {json.dumps(safe_json(last_res))}\n\n"
                 return
 
         try:
@@ -312,7 +312,7 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
             
             _TRAINING_RESULTS[ticker] = (final_res, datetime.now())
             await create_notification(user_id, "signal", f"ML Signal: {ticker}", f"{final_signal} ({int(confidence)}%)")
-            yield f"data: {json.dumps(clean_nans(final_res))}\n\n"
+            yield f"data: {json.dumps(safe_json(final_res))}\n\n"
             
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -344,4 +344,4 @@ async def scan_market():
     except Exception as e:
         print(f"Scan error: {e}")
         
-    return clean_nans({"scan_results": results})
+    return safe_json({"scan_results": results})

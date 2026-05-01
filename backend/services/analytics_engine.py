@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 
+import math
 import numpy as np
 import pandas as pd
 
@@ -18,9 +19,18 @@ def safe_float(value: Any, default: float = 0.0) -> float:
 
 
 def safe_div(numerator: float, denominator: float) -> float:
-    if denominator in (0, 0.0):
+    try:
+        num = float(numerator)
+        den = float(denominator)
+    except (ValueError, TypeError):
         return 0.0
-    return numerator / denominator
+
+    if math.isnan(den) or math.isinf(den) or den == 0.0:
+        return 0.0
+    if math.isnan(num) or math.isinf(num):
+        return 0.0
+        
+    return num / den
 
 
 def compute_drawdowns(nav_series: pd.Series) -> pd.Series:
@@ -68,24 +78,32 @@ def compute_equity_metrics(equity_curve: List[Dict[str, Any]]) -> Dict[str, floa
 
     df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
     df = df.sort_values("snapshot_date").drop_duplicates("snapshot_date")
-    nav = df["nav"].astype(float)
-    returns = nav.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
-    drawdowns = compute_drawdowns(nav)
-
-    latest_nav = float(nav.iloc[-1]) if not nav.empty else 0.0
-    prev_nav = float(nav.iloc[-2]) if len(nav) > 1 else latest_nav
-    daily_pnl = latest_nav - prev_nav
-    daily_return_pct = safe_div(daily_pnl, prev_nav) * 100 if prev_nav else 0.0
+    
+    # Calculate daily returns correctly: r = PnL / (Ending_NAV - PnL - Net_Cash_Flow)
+    # This is equivalent to r = PnL / Starting_NAV
+    # We use the daily_pnl (price-driven) from the curve
+    df["prev_nav"] = df["nav"].shift(1).fillna(0)
+    df["start_nav"] = df["nav"] - df["daily_pnl"] - df.get("net_cash_flow", 0)
+    
+    # Use a small epsilon to avoid division by zero or negative NAV issues
+    df["daily_ret"] = np.where(df["start_nav"] > 1.0, df["daily_pnl"] / df["start_nav"], 0.0)
+    
+    returns = df["daily_ret"].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    
+    latest_nav = float(df["nav"].iloc[-1])
+    daily_pnl = float(df["daily_pnl"].iloc[-1])
+    daily_return_pct = float(returns.iloc[-1]) * 100
 
     latest_date = df["snapshot_date"].iloc[-1].date()
     month_start = latest_date.replace(day=1)
     year_start = latest_date.replace(month=1, day=1)
 
-    month_df = df[df["snapshot_date"].dt.date >= month_start]
-    year_df = df[df["snapshot_date"].dt.date >= year_start]
-
-    mtd_start_nav = float(month_df["nav"].iloc[0]) if not month_df.empty else latest_nav
-    ytd_start_nav = float(year_df["nav"].iloc[0]) if not year_df.empty else latest_nav
+    # TWR Calculation: Product(1 + r_i) - 1
+    mtd_returns = returns[df["snapshot_date"].dt.date >= month_start]
+    ytd_returns = returns[df["snapshot_date"].dt.date >= year_start]
+    
+    mtd_twr = (np.prod(1 + mtd_returns) - 1) * 100 if not mtd_returns.empty else 0.0
+    ytd_twr = (np.prod(1 + ytd_returns) - 1) * 100 if not ytd_returns.empty else 0.0
 
     volatility_daily = float(returns.std()) if not returns.empty else 0.0
     volatility_annualized = volatility_daily * np.sqrt(252)
@@ -99,13 +117,14 @@ def compute_equity_metrics(equity_curve: List[Dict[str, Any]]) -> Dict[str, floa
     downside_vol = float(downside.std()) * np.sqrt(252) if not downside.empty else 0.0
     sortino_ratio = safe_div(mean_excess * 252, downside_vol)
 
+    drawdowns = compute_drawdowns(df["nav"])
     var_95 = float(np.percentile(returns, 5)) if not returns.empty else 0.0
 
     return {
         "daily_pnl": daily_pnl,
         "daily_return_pct": daily_return_pct,
-        "mtd_return_pct": safe_div(latest_nav - mtd_start_nav, mtd_start_nav) * 100 if mtd_start_nav else 0.0,
-        "ytd_return_pct": safe_div(latest_nav - ytd_start_nav, ytd_start_nav) * 100 if ytd_start_nav else 0.0,
+        "mtd_return_pct": mtd_twr,
+        "ytd_return_pct": ytd_twr,
         "volatility_daily": volatility_daily,
         "volatility_annualized": volatility_annualized,
         "sharpe_ratio": sharpe_ratio,
@@ -115,7 +134,7 @@ def compute_equity_metrics(equity_curve: List[Dict[str, Any]]) -> Dict[str, floa
     }
 
 
-def summarize_allocation(positions: Iterable[Dict[str, Any]], total_nav: float) -> Dict[str, List[Dict[str, Any]]]:
+def summarize_allocation(positions: Iterable[Dict[str, Any]], total_holdings_value: float) -> Dict[str, List[Dict[str, Any]]]:
     by_sector: Dict[str, float] = defaultdict(float)
     by_asset_type: Dict[str, float] = defaultdict(float)
     by_country: Dict[str, float] = defaultdict(float)
@@ -124,9 +143,9 @@ def summarize_allocation(positions: Iterable[Dict[str, Any]], total_nav: float) 
         market_value = safe_float(position.get("market_value"))
         if market_value <= 0:
             continue
-        by_sector[position.get("sector") or "Unknown"] += market_value
+        by_sector[position.get("sector") or "Other"] += market_value
         by_asset_type[position.get("asset_type") or "equity"] += market_value
-        by_country[position.get("country") or "Unknown"] += market_value
+        by_country[position.get("country") or "Other"] += market_value
 
     def _to_rows(mapping: Dict[str, float]) -> List[Dict[str, Any]]:
         rows = []
@@ -135,7 +154,7 @@ def summarize_allocation(positions: Iterable[Dict[str, Any]], total_nav: float) 
                 {
                     "label": label,
                     "value": value,
-                    "weight_pct": safe_div(value, total_nav) * 100 if total_nav else 0.0,
+                    "weight_pct": safe_div(value, total_holdings_value) * 100 if total_holdings_value else 0.0,
                 }
             )
         return rows
