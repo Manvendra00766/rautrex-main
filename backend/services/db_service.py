@@ -19,11 +19,13 @@ async def get_portfolios(user_id: str):
 async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", cash_balance: float = 0, description: str = None):
     existing = supabase.table("portfolios").select("id").eq("user_id", user_id).limit(1).execute()
     is_default = not bool(existing.data)
-    # Note: strategy, description, and cash_balance are omitted here to ensure compatibility 
-    # with the current schema. cash_balance is handled via a DEPOSIT transaction in the router.
+    
     return supabase.table("portfolios").insert({
         "user_id": user_id, 
         "name": name, 
+        "strategy": strategy,
+        "description": description,
+        "cash_balance": cash_balance,
         "is_default": is_default,
     }).execute()
 

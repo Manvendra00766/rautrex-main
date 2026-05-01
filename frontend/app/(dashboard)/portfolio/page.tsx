@@ -445,12 +445,13 @@ export default function PortfolioLab() {
                   trendColor={summary.daily_pnl >= 0 ? "text-green-500" : "text-red-500"} 
                   valueClassName={summary.daily_pnl >= 0 ? "text-green-400" : "text-red-400"}
                 />
-                <MetricCard 
-                  title="Unrealized P&L" 
-                  value={formatCurrency(summary.unrealized_pnl)} 
-                  icon={<TrendingUp className="text-cyan-400" />} 
+                <MetricCard
+                  title="Unrealized P&L"
+                  value={formatCurrency(summary.unrealized_pnl_total || summary.unrealized_pnl)}
+                  icon={<TrendingUp className="text-cyan-400" />}
                   valueClassName="text-cyan-400"
                 />
+
                 <MetricCard 
                   title="Realized P&L" 
                   value={formatCurrency(summary.realized_pnl_total || summary.realized_pnl || 0)} 
@@ -541,7 +542,6 @@ export default function PortfolioLab() {
                         <th className="px-3 py-3 text-right">Shares</th>
                         <th className="px-3 py-3 text-right">Avg Cost</th>
                         <th className="px-3 py-3 text-right">Live Price</th>
-                        <th className="px-3 py-3 text-right">Cost Basis</th>
                         <th className="px-3 py-3 text-right">Market Value</th>
                         <th className="px-3 py-3 text-right">Unrealized</th>
                         <th className="px-3 py-3 text-right">Daily P&L</th>
@@ -562,7 +562,6 @@ export default function PortfolioLab() {
                             <td className="px-3 py-4 text-right text-gray-300">{position.shares.toFixed(4).replace(/\.?0+$/, "")}</td>
                             <td className="px-3 py-4 text-right text-gray-300">{formatCurrency(position.avg_cost_per_share)}</td>
                             <td className="px-3 py-4 text-right text-white">{formatCurrency(position.live_price)}</td>
-                            <td className="px-3 py-4 text-right text-gray-300">{formatCurrency(position.cost_basis)}</td>
                             <td className="px-3 py-4 text-right text-white">{formatCurrency(position.market_value)}</td>
                             <td className={cn("px-3 py-4 text-right font-bold", position.unrealized_pnl >= 0 ? "text-green-400" : "text-red-400")}>{formatCurrency(position.unrealized_pnl)}</td>
                             <td className={cn("px-3 py-4 text-right font-bold", position.daily_pnl >= 0 ? "text-green-400" : "text-red-400")}>{formatCurrency(position.daily_pnl)}</td>

@@ -554,6 +554,7 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         "top_position_pct": concentration["top_position_pct"],
         "herfindahl_index": concentration["herfindahl_index"],
         "realized_pnl_total": state["total_realized_pnl"],
+        "unrealized_pnl": sum(position["unrealized_pnl"] for position in state["positions"]),
         "unrealized_pnl_total": sum(position["unrealized_pnl"] for position in state["positions"]),
     }
 
