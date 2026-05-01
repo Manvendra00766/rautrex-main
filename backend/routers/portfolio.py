@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from supabase_client import supabase
@@ -61,7 +62,7 @@ async def portfolio_overview(
 ):
     try:
         data = await get_portfolio_overview(current_user.id, portfolio_id)
-        return safe_json(data)
+        return JSONResponse(content=safe_json(data))
     except Exception as e:
         import traceback
         print(f"Error in portfolio_overview: {e}")
@@ -82,7 +83,7 @@ async def portfolio_overview(
             "allocation": {"by_sector": [], "by_asset_type": [], "by_country": []},
             "warnings": [],
         }
-        return fallback
+        return JSONResponse(content=safe_json(fallback))
 
 
 @router.post("/transactions")
@@ -110,7 +111,7 @@ async def add_portfolio_transaction(
             external_id=req.external_id,
         )
         overview = await get_portfolio_overview(current_user.id, req.portfolio_id)
-        return {"transaction": transaction, "overview": overview}
+        return JSONResponse(content=safe_json({"transaction": transaction, "overview": overview}))
     except HTTPException:
         raise
     except Exception as e:
@@ -128,7 +129,7 @@ async def optimize_portfolio(
             req.tickers, req.method, req.objective, req.constraints, req.risk_free_rate
         )
         res["validation"] = validate_financial_metrics(res)
-        return res
+        return JSONResponse(content=safe_json(res))
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
@@ -142,7 +143,7 @@ async def corr_matrix(
     ticker_list = tickers.split(",")
     try:
         res = await get_correlation_matrix(ticker_list)
-        return {"correlation_matrix": res}
+        return JSONResponse(content=safe_json({"correlation_matrix": res}))
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
@@ -160,7 +161,7 @@ async def rebalance_portfolio(
             req.threshold,
             req.total_value
         )
-        return res
+        return JSONResponse(content=safe_json(res))
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
@@ -179,7 +180,7 @@ async def backtest_rebalance_route(
             req.start_date,
             req.initial_capital
         )
-        return res
+        return JSONResponse(content=safe_json(res))
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:

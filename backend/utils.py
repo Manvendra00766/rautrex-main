@@ -7,12 +7,20 @@ from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
 
+from decimal import Decimal
+
 def safe_json(obj: Any, seen=None) -> Any:
     """
-    Recursively replaces NaN and Inf values with 0 (JSON safe) to ensure JSON compliance.
-    Converts np.float64 and other numpy types to native Python types.
-    Handles nested dicts, lists, numpy types, and pandas objects.
-    Logs when NaN is detected.
+    Recursively replaces NaN and Inf values with 0 (JSON safe).
+    Rules:
+    - np.nan -> 0
+    - np.inf -> 0
+    - -np.inf -> 0
+    - numpy.float64 -> float()
+    - numpy.int64 -> int()
+    - Decimal -> float()
+    - pandas NaT -> None
+    - recursively clean dict/list
     """
     if obj is None:
         return None
@@ -34,7 +42,7 @@ def safe_json(obj: Any, seen=None) -> Any:
         return [safe_json(x, seen) for x in obj]
     elif isinstance(obj, (float, np.floating)):
         if math.isnan(obj) or math.isinf(obj):
-            logger.warning(f"NaN or Inf detected and replaced with 0.0")
+            logger.warning("NaN or Inf detected and replaced with 0.0")
             print("NaN detected in portfolio response")
             return 0.0
         return float(obj)
@@ -42,10 +50,15 @@ def safe_json(obj: Any, seen=None) -> Any:
         return int(obj)
     elif isinstance(obj, (bool, np.bool_)):
         return bool(obj)
+    elif isinstance(obj, Decimal):
+        return float(obj)
     elif isinstance(obj, (str, bytes)):
         return str(obj)
     elif isinstance(obj, (datetime, date)):
         return obj.isoformat()
+    elif pd.isna(obj) and not isinstance(obj, (str, bytes)):
+        # Handles NaT and other pd.NA types
+        return None
     elif isinstance(obj, np.ndarray):
         return [safe_json(x, seen) for x in obj.tolist()]
     elif isinstance(obj, (pd.Series, pd.DataFrame)):

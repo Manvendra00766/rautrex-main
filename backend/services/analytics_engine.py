@@ -25,9 +25,15 @@ def safe_div(numerator: float, denominator: float) -> float:
     except (ValueError, TypeError):
         return 0.0
 
-    if math.isnan(den) or math.isinf(den) or den == 0.0:
+    if den == 0.0:
         return 0.0
+        
+    if math.isnan(den) or math.isinf(den):
+        print("NaN/Inf detected in denominator of safe_div")
+        return 0.0
+        
     if math.isnan(num) or math.isinf(num):
+        print("NaN/Inf detected in numerator of safe_div")
         return 0.0
         
     return num / den
@@ -37,12 +43,14 @@ def compute_drawdowns(nav_series: pd.Series) -> pd.Series:
     if nav_series.empty:
         return pd.Series(dtype=float)
     running_max = nav_series.cummax()
+    # Avoid division by zero in drawdown calculation
     return safe_series_div(nav_series, running_max) - 1.0
 
 
 def safe_series_div(left: pd.Series, right: pd.Series) -> pd.Series:
     with np.errstate(divide="ignore", invalid="ignore"):
         result = left / right
+    # Replace Inf and NaN with 0.0
     return result.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
 

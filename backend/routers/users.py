@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from supabase_client import supabase
 from services import db_service
 from services.portfolio_engine import create_transaction, get_portfolio_overview
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from dependencies import get_current_user
 from typing import Optional, List
+from utils import safe_json
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
@@ -19,10 +21,16 @@ class PortfolioCreate(BaseModel):
     description: Optional[str] = None
 
 class PositionAdd(BaseModel):
-    ticker: str
-    quantity: float
-    avg_cost: float
+    ticker: str = Field(..., min_length=1)
+    quantity: float = Field(..., gt=0)
+    avg_cost: float = Field(..., gt=0)
     asset_type: str = "Stock"
+
+    @validator("ticker")
+    def ticker_must_not_be_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Ticker cannot be empty")
+        return v.strip().upper()
 
 @router.get("/me")
 async def get_my_profile(current_user = Depends(get_current_user)):
@@ -85,11 +93,9 @@ async def add_portfolio_position(
         raise HTTPException(status_code=403, detail="Unauthorized")
         
     try:
-        if pos.quantity <= 0:
-            raise HTTPException(status_code=400, detail="Quantity must be positive")
-        if pos.avg_cost <= 0:
-            raise HTTPException(status_code=400, detail="Average cost price must be positive")
-        if pos.avg_cost > 100000:
+        # Pydantic handles quantity > 0 and avg_cost > 0 via Field(..., gt=0)
+        
+        if pos.avg_cost > 1000000: # Increased limit slightly but kept for safety
             raise HTTPException(status_code=400, detail="Average cost price must be per-share, not total value")
 
         await create_transaction(
@@ -104,17 +110,23 @@ async def add_portfolio_position(
             metadata={"asset_type": pos.asset_type, "source": "position_add"},
         )
         overview = await get_portfolio_overview(current_user.id, portfolio_id)
-        return {
+        
+        response_data = {
             "ok": True,
             "portfolio_id": portfolio_id,
-            "position_added": pos.ticker.upper(),
+            "position_added": pos.ticker,
             "overview": overview,
         }
+        
+        return JSONResponse(content=safe_json(response_data))
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import traceback
+        print(f"Error in add_portfolio_position: {e}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/me/backtests")

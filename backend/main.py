@@ -1,10 +1,48 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from routers import stocks, portfolio, monte_carlo, backtester, options, risk, signals, market, validate, users, notifications, alerts, strategy_compare
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from services.alert_service import check_price_alerts
 import asyncio
+import json
+from utils import safe_json
 from contextlib import asynccontextmanager
+
+class JSONSanitizerMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # Only process JSON responses
+        content_type = response.headers.get("content-type", "")
+        if "application/json" in content_type:
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+            
+            try:
+                # Attempt to parse, sanitize, and re-serialize
+                data = json.loads(body)
+                sanitized_data = safe_json(data)
+                new_content = json.dumps(sanitized_data).encode("utf-8")
+                
+                # Create new response with sanitized content
+                return Response(
+                    content=new_content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type="application/json"
+                )
+            except Exception as e:
+                # If parsing fails, return original body (it might already be sanitized or not JSON)
+                return Response(
+                    content=body,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type="application/json"
+                )
+        
+        return response
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -17,6 +55,9 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 app = FastAPI(title="RAUTREX API", version="1.0.0", lifespan=lifespan)
+
+# Add JSON Sanitizer Middleware
+app.add_middleware(JSONSanitizerMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
