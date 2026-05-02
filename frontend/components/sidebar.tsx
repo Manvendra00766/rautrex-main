@@ -66,11 +66,11 @@ export default function Sidebar() {
           <Image
             src="/logo.png"
             alt="RAUTREX"
-            width={collapsed ? 100 : 140}
-            height={collapsed ? 28 : 36}
+            width={collapsed ? 70 : 240}
+            height={collapsed ? 32 : 60}
             style={{ 
               objectFit: 'contain', 
-              height: collapsed ? '28px' : '36px', 
+              height: collapsed ? '32px' : '60px', 
               width: 'auto',
               display: 'block'
             }}

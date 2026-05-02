@@ -87,7 +87,16 @@ export default function SignalsPage() {
       }, 2000);
 
       // Safety timeout after 60 seconds
-      setTimeout(() => clearInterval(poll), 60000);
+      setTimeout(() => {
+        clearInterval(poll);
+        setLoading(prev => {
+          if (prev) {
+            setError("Request timed out. The ML pipeline is taking longer than expected. Please try again later.");
+            return false;
+          }
+          return prev;
+        });
+      }, 60000);
 
     } catch (err: any) {
       setError(err.message || "Failed to run prediction pipeline");

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
@@ -32,9 +33,15 @@ export default function Navbar() {
       )}
     >
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-2">
-        <div className="w-6 h-6 bg-accent rounded-sm cyan-glow" />
-        <span className="font-mono font-black text-xl tracking-tighter text-white">RAUTREX</span>
+      <Link href="/" className="flex items-center">
+        <Image 
+          src="/logo.png" 
+          alt="RAUTREX Logo" 
+          width={260} 
+          height={68} 
+          className="object-contain h-10 md:h-12 w-auto"
+          priority
+        />
       </Link>
 
       {/* Desktop Links */}

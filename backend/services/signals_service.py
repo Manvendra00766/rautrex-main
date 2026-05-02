@@ -1,10 +1,12 @@
 import os
 import json
 import asyncio
+import time
+import uuid
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import joblib
 
 # ML Libraries
@@ -201,22 +203,22 @@ def get_ticker_lock(ticker: str):
     return _TRAINING_LOCKS[ticker]
 
 async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
-    ticker = ticker.upper()
-    start_time = time.time()
-    lock = get_ticker_lock(ticker)
-    
-    async with lock:
-        if ticker in _TRAINING_RESULTS:
-            last_res, timestamp = _TRAINING_RESULTS[ticker]
-            if datetime.now() - timestamp < timedelta(minutes=30):
-                job_store[job_id] = {
-                    "status": "complete",
-                    "progress": 100,
-                    "result": last_res["result"]
-                }
-                return
+    try:
+        ticker = ticker.upper()
+        start_time = time.time()
+        lock = get_ticker_lock(ticker)
+        
+        async with lock:
+            if ticker in _TRAINING_RESULTS:
+                last_res, timestamp = _TRAINING_RESULTS[ticker]
+                if datetime.now() - timestamp < timedelta(minutes=30):
+                    job_store[job_id] = {
+                        "status": "complete",
+                        "progress": 100,
+                        "result": last_res["result"]
+                    }
+                    return
 
-        try:
             job_store[job_id]["progress"] = 5
             job_store[job_id]["status"] = f"Fetching data for {ticker}..."
             
@@ -375,8 +377,13 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 "result": final_res["result"]
             }
             
-        except Exception as e:
-            job_store[job_id] = {"status": "error", "message": str(e)}
+    except Exception as e:
+        job_store[job_id] = {
+            "status": "error",
+            "progress": 0,
+            "result": None,
+            "message": str(e)
+        }
 
 async def run_ml_pipeline_stream(ticker: str, user_id: str):
     ticker = ticker.upper()
