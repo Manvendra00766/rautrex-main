@@ -14,7 +14,9 @@ async def update_profile(user_id: str, data: dict):
 # --- PORTFOLIOS ---
 
 async def get_portfolios(user_id: str):
-    return supabase.table("portfolios").select("*, portfolio_positions(*), portfolio_transactions(*)").eq("user_id", user_id).execute()
+    return supabase.table("portfolios") \
+        .select("*, portfolio_positions(*), portfolio_transactions(*)") \
+        .eq("user_id", user_id).execute()
 
 async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", cash_balance: float = 0, description: str = None):
     existing = supabase.table("portfolios").select("id").eq("user_id", user_id).limit(1).execute()
@@ -39,6 +41,31 @@ async def update_portfolio_cash(portfolio_id: str, new_cash_balance: float):
     return supabase.table("portfolios") \
         .update({"cash_balance": new_cash_balance}) \
         .eq("id", portfolio_id) \
+        .execute()
+
+async def record_transaction(portfolio_id: str, ticker: str, transaction_type: str, shares: float, price_per_share: float, notes: str = None):
+    if transaction_type not in ["BUY", "SELL"]:
+        raise ValueError("transaction_type must be BUY or SELL")
+    if shares <= 0:
+        raise ValueError("Shares must be positive")
+    if price_per_share <= 0:
+        raise ValueError("Price per share must be positive")
+
+    return supabase.table("portfolio_transactions").insert({
+        "portfolio_id": portfolio_id,
+        "ticker": ticker.upper(),
+        "transaction_type": transaction_type.upper(),
+        "shares": shares,
+        "price_per_share": price_per_share,
+        "notes": notes,
+    }).execute()
+
+async def get_transactions(portfolio_id: str, limit: int = 50, offset: int = 0):
+    return supabase.table("portfolio_transactions") \
+        .select("*") \
+        .eq("portfolio_id", portfolio_id) \
+        .order("created_at", ascending=False) \
+        .range(offset, offset + limit - 1) \
         .execute()
 
 async def add_position(portfolio_id: str, ticker: str, exchange: str, shares: float, avg_cost_price: float):
