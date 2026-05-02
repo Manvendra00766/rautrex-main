@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 import uuid
+import time
 from services.signals_service import run_signal_pipeline, job_store, scan_market
 from dependencies import get_current_user
 
