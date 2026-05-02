@@ -58,38 +58,37 @@ export default function SignalsPage() {
         body: JSON.stringify({ ticker }),
       });
 
-      if (!response.body) throw new Error("No response body");
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
+      const { job_id } = await response.json();
+      if (!job_id) throw new Error("Failed to start signal job");
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(l => l.trim() !== '');
-        
-        for (const line of lines) {
-          try {
-            const jsonStr = line.startsWith('data: ') ? line.replace('data: ', '') : line;
-            if (!jsonStr.startsWith('{')) continue;
-            
-            const data = JSON.parse(jsonStr);
-            if (data.error) {
-              throw new Error(data.error);
-            }
-            if (data.progress) setProgress(data.progress);
-            if (data.status) setStatusMsg(data.status);
-            if (data.result) {
-              setResult(data.result);
-              setLoading(false);
-              toast({ type: 'success', title: 'Signals Generated', description: `AI Ensemble output for ${ticker} is ready.` });
-            }
-          } catch (e: any) {
-            console.error("Error parsing JSON chunk:", e);
+      const poll = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/signals/status/${job_id}`, {
+            headers
+          });
+          const data = await statusRes.json();
+          
+          if (data.progress) setProgress(data.progress);
+          if (data.status) setStatusMsg(data.status);
+          
+          if (data.status === 'complete') {
+            clearInterval(poll);
+            setResult(data.result);
+            setLoading(false);
+            toast({ type: 'success', title: 'Signals Generated', description: `AI Ensemble output for ${ticker} is ready.` });
+          } else if (data.status === 'error') {
+            clearInterval(poll);
+            setError(data.message || "Pipeline failed");
+            setLoading(false);
           }
+        } catch (e) {
+          console.error("Polling error:", e);
         }
-      }
+      }, 2000);
+
+      // Safety timeout after 60 seconds
+      setTimeout(() => clearInterval(poll), 60000);
+
     } catch (err: any) {
       setError(err.message || "Failed to run prediction pipeline");
       toast({ type: 'error', title: 'Pipeline Failed', description: err.message });
@@ -284,20 +283,22 @@ export default function SignalsPage() {
                    <h3 className="font-bold text-sm flex items-center gap-2"><Cpu size={16} className="text-accent" /> LSTM Sequence Analysis</h3>
                    <span className="text-[10px] font-mono text-gray-500">WEIGHT: 40%</span>
                 </div>
-                <div className="h-[200px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={historyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                      <XAxis dataKey="label" hide />
-                      <YAxis domain={['auto', 'auto']} hide />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                        itemStyle={{ fontSize: '12px' }}
-                      />
-                      <Line type="monotone" dataKey="price" stroke="rgba(255,255,255,0.3)" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="price" data={historyData.filter(d => d.isPrediction)} stroke="#00d4ff" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 6, fill: '#fff', stroke: '#00d4ff', strokeWidth: 2 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="h-[200px] w-full" style={{ minHeight: 200, minWidth: 0 }}>
+                  {historyData && historyData.length > 0 && (
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                      <LineChart data={historyData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                        <XAxis dataKey="label" hide />
+                        <YAxis domain={['auto', 'auto']} hide />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                          itemStyle={{ fontSize: '12px' }}
+                        />
+                        <Line type="monotone" dataKey="price" stroke="rgba(255,255,255,0.3)" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="price" data={historyData.filter(d => d.isPrediction)} stroke="#00d4ff" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 6, fill: '#fff', stroke: '#00d4ff', strokeWidth: 2 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
                 <div className="p-3 rounded-lg bg-white/5 border border-white/5">
                   <p className="text-xs text-gray-400 leading-relaxed italic">
@@ -313,20 +314,22 @@ export default function SignalsPage() {
                    <h3 className="font-bold text-sm flex items-center gap-2"><Activity size={16} className="text-purple-500" /> Model Conviction</h3>
                    <span className="text-[10px] font-mono text-gray-500">WEIGHT: 35%</span>
                 </div>
-                <div className="h-[200px] w-full">
-                   <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={[
-                        { name: 'LSTM', val: Math.abs(result.signal_breakdown?.model_scores?.lstm_expected_return_pct || 0) },
-                        { name: 'XGB', val: (result.signal_breakdown?.model_scores?.xgboost_confidence_pct || 0) },
-                        { name: 'NLP', val: Math.abs((result.signal_breakdown?.model_scores?.sentiment_score || 0) * 100) }
-                      ]} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                        <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={10} />
-                        <YAxis hide />
-                        <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
-                        <Bar dataKey="val" fill="#7c3aed" radius={[4, 4, 0, 0]} barSize={40} />
-                      </BarChart>
-                   </ResponsiveContainer>
+                <div className="h-[200px] w-full" style={{ minHeight: 200, minWidth: 0 }}>
+                   {result.signal_breakdown && (
+                     <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
+                        <BarChart data={[
+                          { name: 'LSTM', val: Math.abs(result.signal_breakdown?.model_scores?.lstm_expected_return_pct || 0) },
+                          { name: 'XGB', val: (result.signal_breakdown?.model_scores?.xgboost_confidence_pct || 0) },
+                          { name: 'NLP', val: Math.abs((result.signal_breakdown?.model_scores?.sentiment_score || 0) * 100) }
+                        ]} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                          <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" fontSize={10} />
+                          <YAxis hide />
+                          <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }} />
+                          <Bar dataKey="val" fill="#7c3aed" radius={[4, 4, 0, 0]} barSize={40} />
+                        </BarChart>
+                     </ResponsiveContainer>
+                   )}
                 </div>
                 <div className="p-3 rounded-lg bg-white/5 border border-white/5">
                   <p className="text-xs text-gray-400 leading-relaxed italic">

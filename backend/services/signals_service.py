@@ -193,11 +193,190 @@ from services.notification_service import create_notification
 
 _TRAINING_LOCKS = {}
 _TRAINING_RESULTS = {}
+job_store = {}
 
 def get_ticker_lock(ticker: str):
     if ticker not in _TRAINING_LOCKS:
         _TRAINING_LOCKS[ticker] = asyncio.Lock()
     return _TRAINING_LOCKS[ticker]
+
+async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
+    ticker = ticker.upper()
+    start_time = time.time()
+    lock = get_ticker_lock(ticker)
+    
+    async with lock:
+        if ticker in _TRAINING_RESULTS:
+            last_res, timestamp = _TRAINING_RESULTS[ticker]
+            if datetime.now() - timestamp < timedelta(minutes=30):
+                job_store[job_id] = {
+                    "status": "complete",
+                    "progress": 100,
+                    "result": last_res["result"]
+                }
+                return
+
+        try:
+            job_store[job_id]["progress"] = 5
+            job_store[job_id]["status"] = f"Fetching data for {ticker}..."
+            
+            df_raw = yf.download(ticker, period="2y", progress=False)
+            if df_raw.empty:
+                job_store[job_id] = {"status": "error", "message": f"No data for {ticker}"}
+                return
+                
+            if isinstance(df_raw.columns, pd.MultiIndex):
+                df = df_raw.copy()
+                df.columns = df.columns.get_level_values(0)
+            else:
+                df = df_raw.copy()
+
+            df = add_technical_indicators(df)
+            if len(df) < 80:
+                 job_store[job_id] = {"status": "error", "message": "Insufficient history."}
+                 return
+
+            # Consuming generators but updating job_store instead of yielding
+            async for msg in train_lstm_generator(ticker, df):
+                if time.time() - start_time > 45: break
+                job_store[job_id]["progress"] = msg["progress"]
+                job_store[job_id]["status"] = msg["status"]
+            
+            if time.time() - start_time > 45:
+                job_store[job_id] = {
+                    "status": "complete",
+                    "progress": 100,
+                    "result": {"ticker": ticker, "final_signal": "HOLD", "confidence": 50, "method": "fallback_sma"}
+                }
+                return
+
+            async for msg in train_trend_generator(ticker, df):
+                if time.time() - start_time > 45: break
+                job_store[job_id]["progress"] = msg["progress"]
+                job_store[job_id]["status"] = msg["status"]
+
+            if time.time() - start_time > 45:
+                job_store[job_id] = {
+                    "status": "complete",
+                    "progress": 100,
+                    "result": {"ticker": ticker, "final_signal": "HOLD", "confidence": 50, "method": "fallback_sma"}
+                }
+                return
+
+            async for msg in train_garch_generator(ticker, df):
+                if time.time() - start_time > 45: break
+                job_store[job_id]["progress"] = msg["progress"]
+                job_store[job_id]["status"] = msg["status"]
+
+            if time.time() - start_time > 45:
+                job_store[job_id] = {
+                    "status": "complete",
+                    "progress": 100,
+                    "result": {"ticker": ticker, "final_signal": "HOLD", "confidence": 50, "method": "fallback_sma"}
+                }
+                return
+
+            async for msg in train_anomaly_generator(ticker, df):
+                if time.time() - start_time > 45: break
+                job_store[job_id]["progress"] = msg["progress"]
+                job_store[job_id]["status"] = msg["status"]
+
+            if time.time() - start_time > 45:
+                job_store[job_id] = {
+                    "status": "complete",
+                    "progress": 100,
+                    "result": {"ticker": ticker, "final_signal": "HOLD", "confidence": 50, "method": "fallback_sma"}
+                }
+                return
+            
+            # --- Inference ---
+            current_price = float(df['Close'].iloc[-1])
+            pred_price = current_price
+            
+            if os.path.exists(f"{CACHE_DIR}/{ticker}_lstm.pth"):
+                model_lstm = LSTMModel(12)
+                model_lstm.load_state_dict(torch.load(f"{CACHE_DIR}/{ticker}_lstm.pth"))
+                model_lstm.eval()
+                scaler_X = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
+                scaler_y = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
+                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-60:]
+                X_pred = torch.tensor(np.array([scaler_X.transform(recent)]), dtype=torch.float32)
+                with torch.no_grad(): pred_scaled = model_lstm(X_pred).numpy()
+                pred_price = float(scaler_y.inverse_transform(pred_scaled)[0][0])
+            
+            predicted_return = (pred_price - current_price) / current_price
+            
+            trend_class = "Neutral"
+            trend_probs = [0, 1, 0]
+            if os.path.exists(f"{CACHE_DIR}/{ticker}_trend.pkl"):
+                model_trend = joblib.load(f"{CACHE_DIR}/{ticker}_trend.pkl")
+                recent_feat = df[['rsi', 'macd', 'atr', 'obv']].values[-1:]
+                trend_probs = model_trend.predict_proba(recent_feat)[0]
+                classes = ["Down", "Neutral", "Up"]
+                trend_class = classes[np.argmax(trend_probs)]
+            
+            vol_regime = "medium"
+            if os.path.exists(f"{CACHE_DIR}/{ticker}_garch.pkl"):
+                res_garch = joblib.load(f"{CACHE_DIR}/{ticker}_garch.pkl")
+                vol_pred = np.sqrt(res_garch.forecast(horizon=1).variance.values[-1, :])[0]
+                vol_regime = "high" if vol_pred > 2 else "low" if vol_pred < 1 else "medium"
+            
+            sent_score, headlines = get_sentiment(ticker)
+            
+            # Simple Ensemble
+            score = 0
+            if predicted_return > 0.02: score += 1
+            elif predicted_return < -0.02: score -= 1
+            if trend_class == "Up": score += 1
+            elif trend_class == "Down": score -= 1
+            if sent_score > 0.1: score += 1
+            elif sent_score < -0.1: score -= 1
+            
+            final_signal = "BUY" if score >= 2 else "SELL" if score <= -2 else "HOLD"
+            confidence = min(max(50 + abs(score) * 15, 50), 95)
+            stop_loss_pct = 7.0 if vol_regime == "high" else 5.0 if vol_regime == "medium" else 3.0
+            suggested_position_size_pct = max(2.5, min(15.0, confidence / 8 if vol_regime != "high" else confidence / 10))
+            reward_target_pct = max(abs(predicted_return) * 100 * 1.5, stop_loss_pct * 1.2)
+            risk_reward_ratio = reward_target_pct / stop_loss_pct if stop_loss_pct else 0
+            
+            final_res = {
+                "status": "Complete", 
+                "progress": 100, 
+                "result": {
+                    "ticker": ticker, 
+                    "current_price": current_price,
+                    "final_signal": final_signal,
+                    "confidence": float(confidence),
+                    "signal_breakdown": {
+                        "lstm": {"predicted_price": pred_price, "expected_return": float(predicted_return)},
+                        "xgboost": {"trend": trend_class, "confidence": float(max(trend_probs))},
+                        "sentiment": {"score": float(sent_score), "count": len(headlines), "recent_headlines": headlines},
+                        "model_scores": {
+                            "lstm_expected_return_pct": float(predicted_return * 100),
+                            "xgboost_confidence_pct": float(max(trend_probs) * 100),
+                            "sentiment_score": float(sent_score),
+                        },
+                    },
+                    "risk_assessment": {
+                        "volatility": vol_regime,
+                        "suggested_stop_loss_pct": float(stop_loss_pct),
+                        "suggested_position_size_pct": float(suggested_position_size_pct),
+                        "reward_target_pct": float(reward_target_pct),
+                        "risk_reward_ratio": float(risk_reward_ratio),
+                    }
+                }
+            }
+            
+            _TRAINING_RESULTS[ticker] = (final_res, datetime.now())
+            await create_notification(user_id, "signal", f"ML Signal: {ticker}", f"{final_signal} ({int(confidence)}%)")
+            job_store[job_id] = {
+                "status": "complete",
+                "progress": 100,
+                "result": final_res["result"]
+            }
+            
+        except Exception as e:
+            job_store[job_id] = {"status": "error", "message": str(e)}
 
 async def run_ml_pipeline_stream(ticker: str, user_id: str):
     ticker = ticker.upper()

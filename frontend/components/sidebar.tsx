@@ -15,6 +15,7 @@ import {
   MoreHorizontal
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsTablet, useIsMobile } from "@/lib/hooks";
@@ -61,10 +62,21 @@ export default function Sidebar() {
       )}
     >
       <div className="h-16 flex items-center justify-center border-b border-white/5 overflow-hidden">
-        <h1 className="font-bold text-xl tracking-tighter text-white flex items-center gap-2">
-          <div className="w-6 h-6 bg-accent rounded-sm shrink-0" />
-          {!collapsed && <span className="text-accent">RAUTREX</span>}
-        </h1>
+        <Link href="/dashboard" className="block">
+          <Image
+            src="/logo.png"
+            alt="RAUTREX"
+            width={collapsed ? 100 : 140}
+            height={collapsed ? 28 : 36}
+            style={{ 
+              objectFit: 'contain', 
+              height: collapsed ? '28px' : '36px', 
+              width: 'auto',
+              display: 'block'
+            }}
+            priority
+          />
+        </Link>
       </div>
 
       <nav className="flex-1 py-6 flex flex-col gap-2 px-3 overflow-y-auto custom-scrollbar">
