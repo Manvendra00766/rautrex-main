@@ -1,5 +1,5 @@
 from supabase_client import supabase
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import HTTPException
 
 # --- PROFILES ---
@@ -14,7 +14,7 @@ async def update_profile(user_id: str, data: dict):
 # --- PORTFOLIOS ---
 
 async def get_portfolios(user_id: str):
-    return supabase.table("portfolios").select("*, portfolio_positions(*)").eq("user_id", user_id).execute()
+    return supabase.table("portfolios").select("*, portfolio_positions(*), portfolio_transactions(*)").eq("user_id", user_id).execute()
 
 async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", cash_balance: float = 0, description: str = None):
     existing = supabase.table("portfolios").select("id").eq("user_id", user_id).limit(1).execute()
@@ -26,11 +26,20 @@ async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", ca
         "strategy": strategy,
         "description": description,
         "cash_balance": cash_balance,
+        "initial_cash": cash_balance,
         "is_default": is_default,
     }).execute()
 
 async def delete_portfolio(portfolio_id: str, user_id: str):
     return supabase.table("portfolios").delete().eq("id", portfolio_id).eq("user_id", user_id).execute()
+
+async def update_portfolio_cash(portfolio_id: str, new_cash_balance: float):
+    if new_cash_balance < 0:
+        raise ValueError("Cash balance cannot be negative")
+    return supabase.table("portfolios") \
+        .update({"cash_balance": new_cash_balance}) \
+        .eq("id", portfolio_id) \
+        .execute()
 
 async def add_position(portfolio_id: str, ticker: str, exchange: str, shares: float, avg_cost_price: float):
    if shares <= 0:
@@ -39,6 +48,15 @@ async def add_position(portfolio_id: str, ticker: str, exchange: str, shares: fl
        raise ValueError("Average cost price must be positive")
    if avg_cost_price > 100000:
        raise ValueError("avg_cost must be per share price, not total value")
+
+   existing = supabase.table("portfolio_positions") \
+        .select("id") \
+        .eq("portfolio_id", portfolio_id) \
+        .eq("ticker", ticker.upper()) \
+        .limit(1).execute()
+    
+   if existing.data:
+        raise HTTPException(status_code=409, detail=f"{ticker.upper()} already exists in this portfolio. Use update position instead.")
 
    return supabase.table("portfolio_positions").insert({        
         "portfolio_id": portfolio_id, 
@@ -180,7 +198,7 @@ async def trigger_alert(alert_id: str):
     return supabase.table("price_alerts") \
         .update({
             "is_triggered": True, 
-            "triggered_at": datetime.now().isoformat()
+            "triggered_at": datetime.now(timezone.utc).isoformat()
         }) \
         .eq("id", alert_id) \
         .execute()
@@ -192,8 +210,11 @@ async def get_price_alerts(user_id: str):
 
 async def save_signal(user_id: str, ticker: str, signal_type: str, details: dict):
     return supabase.table("saved_signals").insert({
-        "user_id": user_id, "ticker": ticker.upper(), 
-        "signal_type": signal_type, "details": details
+        "user_id": user_id, 
+        "ticker": ticker.upper(), 
+        "signal_type": signal_type, 
+        "details": details,
+        "created_at": datetime.now(timezone.utc).isoformat()
     }).execute()
 
 async def get_saved_signals(user_id: str):
