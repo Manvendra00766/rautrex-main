@@ -3,6 +3,7 @@ import json
 import asyncio
 import time
 import uuid
+import sqlite3
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -23,6 +24,62 @@ from utils import safe_json
 
 CACHE_DIR = "models_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Persistent Job Store (SQLite)
+DB_PATH = "jobs.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS signals_jobs
+                 (id TEXT PRIMARY KEY, data TEXT)''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def get_job(job_id: str):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT data FROM signals_jobs WHERE id=?", (job_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return json.loads(row[0])
+    except Exception as e:
+        print(f"Persistence Error (get): {e}")
+    return None
+
+def set_job(job_id: str, data: dict):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO signals_jobs (id, data) VALUES (?, ?)",
+                  (job_id, json.dumps(data)))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Persistence Error (set): {e}")
+
+# The existing job_store reference is kept as a property-based proxy for compatibility
+class JobStoreProxy:
+    def __getitem__(self, key):
+        job = get_job(key)
+        if job is None: raise KeyError(key)
+        return job
+    
+    def __setitem__(self, key, value):
+        set_job(key, value)
+    
+    def get(self, key, default=None):
+        job = get_job(key)
+        return job if job is not None else default
+    
+    def __contains__(self, key):
+        return get_job(key) is not None
+
+job_store = JobStoreProxy()
 
 # --- 1. PRICE PREDICTION: PyTorch LSTM ---
 class LSTMModel(nn.Module):
@@ -86,13 +143,13 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         y = torch.tensor(np.array(y), dtype=torch.float32)
         
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=32, shuffle=True)
+        loader = DataLoader(dataset, batch_size=64, shuffle=True)
         
         model = LSTMModel(input_dim=len(features))
         criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
         
-        epochs = 5 
+        epochs = 3 
         for epoch in range(epochs):
             model.train()
             for batch_X, batch_y in loader:
@@ -195,7 +252,6 @@ from services.notification_service import create_notification
 
 _TRAINING_LOCKS = {}
 _TRAINING_RESULTS = {}
-job_store = {}
 
 def get_ticker_lock(ticker: str):
     if ticker not in _TRAINING_LOCKS:
@@ -219,8 +275,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                     }
                     return
 
-            job_store[job_id]["progress"] = 5
-            job_store[job_id]["status"] = f"Fetching data for {ticker}..."
+            job_store[job_id] = {"status": f"Fetching data for {ticker}...", "progress": 5}
             
             df_raw = yf.download(ticker, period="2y", progress=False)
             if df_raw.empty:
@@ -240,11 +295,10 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
 
             # Consuming generators but updating job_store instead of yielding
             async for msg in train_lstm_generator(ticker, df):
-                if time.time() - start_time > 45: break
-                job_store[job_id]["progress"] = msg["progress"]
-                job_store[job_id]["status"] = msg["status"]
+                if time.time() - start_time > 180: break
+                job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
             
-            if time.time() - start_time > 45:
+            if time.time() - start_time > 180:
                 job_store[job_id] = {
                     "status": "complete",
                     "progress": 100,
@@ -253,11 +307,10 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 return
 
             async for msg in train_trend_generator(ticker, df):
-                if time.time() - start_time > 45: break
-                job_store[job_id]["progress"] = msg["progress"]
-                job_store[job_id]["status"] = msg["status"]
+                if time.time() - start_time > 180: break
+                job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
 
-            if time.time() - start_time > 45:
+            if time.time() - start_time > 180:
                 job_store[job_id] = {
                     "status": "complete",
                     "progress": 100,
@@ -266,11 +319,10 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 return
 
             async for msg in train_garch_generator(ticker, df):
-                if time.time() - start_time > 45: break
-                job_store[job_id]["progress"] = msg["progress"]
-                job_store[job_id]["status"] = msg["status"]
+                if time.time() - start_time > 180: break
+                job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
 
-            if time.time() - start_time > 45:
+            if time.time() - start_time > 180:
                 job_store[job_id] = {
                     "status": "complete",
                     "progress": 100,
@@ -279,11 +331,10 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 return
 
             async for msg in train_anomaly_generator(ticker, df):
-                if time.time() - start_time > 45: break
-                job_store[job_id]["progress"] = msg["progress"]
-                job_store[job_id]["status"] = msg["status"]
+                if time.time() - start_time > 180: break
+                job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
 
-            if time.time() - start_time > 45:
+            if time.time() - start_time > 180:
                 job_store[job_id] = {
                     "status": "complete",
                     "progress": 100,
@@ -342,7 +393,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             risk_reward_ratio = reward_target_pct / stop_loss_pct if stop_loss_pct else 0
             
             final_res = {
-                "status": "Complete", 
+                "status": "complete", 
                 "progress": 100, 
                 "result": {
                     "ticker": ticker, 
@@ -371,11 +422,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             
             _TRAINING_RESULTS[ticker] = (final_res, datetime.now())
             await create_notification(user_id, "signal", f"ML Signal: {ticker}", f"{final_signal} ({int(confidence)}%)")
-            job_store[job_id] = {
-                "status": "complete",
-                "progress": 100,
-                "result": final_res["result"]
-            }
+            job_store[job_id] = final_res
             
     except Exception as e:
         job_store[job_id] = {
@@ -469,7 +516,7 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
             risk_reward_ratio = reward_target_pct / stop_loss_pct if stop_loss_pct else 0
             
             final_res = {
-                "status": "Complete", 
+                "status": "complete", 
                 "progress": 100, 
                 "result": {
                     "ticker": ticker, 

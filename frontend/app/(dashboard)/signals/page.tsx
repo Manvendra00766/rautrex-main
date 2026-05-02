@@ -86,7 +86,7 @@ export default function SignalsPage() {
         }
       }, 2000);
 
-      // Safety timeout after 60 seconds
+      // Safety timeout after 240 seconds
       setTimeout(() => {
         clearInterval(poll);
         setLoading(prev => {
@@ -96,7 +96,7 @@ export default function SignalsPage() {
           }
           return prev;
         });
-      }, 60000);
+      }, 240000);
 
     } catch (err: any) {
       setError(err.message || "Failed to run prediction pipeline");
