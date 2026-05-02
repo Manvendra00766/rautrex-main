@@ -31,7 +31,7 @@ export default function MarketHub() {
   const [info, setInfo] = useState<any>(null);
   
   const [indices, setIndices] = useState<any[]>([]);
-  const [movers, setMovers] = useState<any>(null);
+  const [movers, setMovers] = useState<any>({ gainers: [], losers: [], active: [] });
   const [screener, setScreener] = useState<any[]>([]);
 
   const [period, setPeriod] = useState("1mo");
@@ -73,11 +73,11 @@ export default function MarketHub() {
         apiFetch(`/stocks/${ticker}/info`)
       ]);
       
-      setQuote(qData);
-      setHistory(hData.data || []);
-      setFundamentals(fData);
-      setNews(nData.news || []);
-      setInfo(iData);
+      setQuote(qData ?? null);
+      setHistory((hData?.data ?? []).filter(Boolean));
+      setFundamentals(fData ?? null);
+      setNews((nData?.news ?? []).filter(Boolean));
+      setInfo(iData ?? null);
       
       toast({ type: 'success', title: 'Data Updated', description: `Market profile for ${ticker} refreshed.` });
     } catch (err: any) {
@@ -122,7 +122,7 @@ export default function MarketHub() {
       const lineSeries = chart.addSeries(LineSeries, {
         color: '#00d4ff', lineWidth: 2,
       });
-      lineSeries.setData(history.map(d => ({ time: d.time, value: d.close })));
+      lineSeries.setData(history.filter(Boolean).map(d => ({ time: d.time, value: d.close })));
     }
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -131,7 +131,7 @@ export default function MarketHub() {
       priceScaleId: '',
     });
     volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-    volumeSeries.setData(history.map(d => ({
+    volumeSeries.setData(history.filter(Boolean).map(d => ({
       time: d.time,
       value: d.volume,
       color: d.close > d.open ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'
@@ -143,9 +143,9 @@ export default function MarketHub() {
     return () => window.removeEventListener('resize', handleResize);
   }, [history, chartType, isMobile]);
 
-  const fetchIndices = async () => apiFetch("/market/indices").then(data => setIndices(data.indices || [])).catch(console.error);
-  const fetchMovers = async () => apiFetch("/market/movers").then(data => setMovers(data)).catch(console.error);
-  const fetchScreener = async () => apiFetch("/market/screener").then(data => setScreener(data.results || [])).catch(console.error);
+  const fetchIndices = async () => apiFetch("/market/indices").then(data => setIndices(data?.indices ?? [])).catch(console.error);
+  const fetchMovers = async () => apiFetch("/market/movers").then(data => setMovers(data ?? { gainers: [], losers: [], active: [] })).catch(console.error);
+  const fetchScreener = async () => apiFetch("/market/screener").then(data => setScreener(data?.results ?? [])).catch(console.error);
 
   const toggleWatchlist = (t: string) => {
     let nl = [...watchlist];
@@ -188,7 +188,7 @@ export default function MarketHub() {
 
       {/* INDICES TAPE */}
       <div className="flex md:grid md:grid-cols-4 lg:grid-cols-8 gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar custom-scrollbar">
-        {Array.isArray(indices) && indices.map(idx => (
+        {(indices ?? []).filter(Boolean).map(idx => (
           <div key={idx.name} className="glass-panel p-3 rounded-xl border-white/5 flex flex-col gap-1 cursor-pointer hover:bg-white/5 transition-colors min-w-[120px] md:min-w-0" onClick={() => setTicker(idx.ticker)}>
             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest truncate">{idx.name}</span>
             <div className="flex justify-between items-end">
@@ -246,9 +246,13 @@ export default function MarketHub() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[500px]">
         {/* LEFT */}
         <div className="lg:col-span-8 flex flex-col gap-6">
-          {loading ? <ChartSkeleton type="line" className="h-[300px] md:h-[450px]" /> : error ? <ErrorState onRetry={fetchData} message={error} /> : (
-            <div className="glass-panel p-2 md:p-4 rounded-2xl bg-[#0d0d14]">
-               <div ref={chartContainerRef} className="w-full h-[300px] md:h-[450px]" />
+          {loading ? <ChartSkeleton type="line" className="h-[300px] md:h-[450px]" /> : error ? <ErrorState onRetry={fetchData} message={error} /> : !history || history.length === 0 ? (
+            <div className="glass-panel h-[300px] md:h-[450px] flex items-center justify-center text-gray-500 font-mono text-xs italic">
+              No historical data available for {ticker}
+            </div>
+          ) : (
+            <div className="glass-panel p-2 md:p-4 rounded-2xl bg-[#0d0d14]" style={{ width: '100%', minWidth: 0 }}>
+               <div ref={chartContainerRef} className="w-full h-[300px] md:h-[450px]" style={{ minWidth: 0 }} />
             </div>
           )}
 
@@ -270,7 +274,7 @@ export default function MarketHub() {
              <div className="glass-panel p-6 rounded-2xl flex flex-col gap-4 h-[350px]">
                 <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2 border-b border-white/5 pb-3"><BookOpen size={14} className="text-accent"/> Intelligence</h3>
                 <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                   {news.map((n, i) => (
+                   {(news ?? []).filter(Boolean).map((n, i) => (
                      <a key={i} href={n.link} target="_blank" rel="noreferrer" className="block p-3 rounded-xl bg-surface hover:bg-white/5 border border-white/5 transition-all group">
                         <p className="text-[10px] text-white font-bold mb-2 line-clamp-2 group-hover:text-accent transition-colors">{n.title}</p>
                         <div className="flex justify-between text-[9px] text-gray-500 font-mono">
@@ -292,7 +296,7 @@ export default function MarketHub() {
                 <Droppable droppableId="watchlist">
                   {(provided) => (
                     <div {...provided.droppableProps} ref={provided.innerRef} className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-1">
-                      {watchlist.map((t, index) => (
+                      {(watchlist ?? []).filter(Boolean).map((t, index) => (
                         <Draggable key={t} draggableId={t} index={index}>
                           {(provided, snapshot) => (
                             <div ref={provided.innerRef} {...provided.draggableProps} className={cn("flex items-center justify-between p-2.5 rounded-xl bg-[#0d0d14] border hover:border-white/20 transition-all group", snapshot.isDragging ? 'border-accent shadow-2xl z-50 scale-105' : 'border-white/5')}>
@@ -322,7 +326,7 @@ export default function MarketHub() {
                 </TabsList>
                 {['gainers', 'losers', 'active'].map(type => (
                   <TabsContent key={type} value={type} className="flex-1 overflow-auto custom-scrollbar mt-0">
-                     {(movers?.[type] || []).map((m: any) => (
+                     {(movers?.[type] ?? []).filter(Boolean).map((m: any) => (
                         <div key={m.ticker} onClick={() => setTicker(m.ticker)} className="flex justify-between items-center p-2.5 rounded-xl hover:bg-white/5 cursor-pointer font-mono text-[11px] group border border-transparent hover:border-white/5 transition-all mb-1">
                           <span className="font-black text-white group-hover:text-accent transition-colors">{m.ticker}</span>
                           <div className="text-right">
