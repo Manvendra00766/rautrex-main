@@ -4,6 +4,7 @@ import asyncio
 import time
 import uuid
 import sqlite3
+import gc
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -83,7 +84,7 @@ job_store = JobStoreProxy()
 
 # --- 1. PRICE PREDICTION: PyTorch LSTM ---
 class LSTMModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim=64, num_layers=2, output_dim=1):
+    def __init__(self, input_dim, hidden_dim=32, num_layers=2, output_dim=1):
         super(LSTMModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -130,7 +131,7 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         data_scaled = scaler_X.fit_transform(data)
         target_scaled = scaler_y.fit_transform(target)
         
-        seq_length = 60
+        seq_length = 30
         if len(data_scaled) <= seq_length:
             raise ValueError(f"Insufficient data for LSTM. Need > {seq_length} points.")
 
@@ -149,7 +150,7 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
         
-        epochs = 3 
+        epochs = 2 
         for epoch in range(epochs):
             model.train()
             for batch_X, batch_y in loader:
@@ -166,6 +167,11 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         torch.save(model.state_dict(), f"{CACHE_DIR}/{ticker}_lstm.pth")
         joblib.dump(scaler_X, f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
         joblib.dump(scaler_y, f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
+        
+        # Explicitly free memory
+        del X, y, dataset, loader, model
+        gc.collect()
+        torch.cuda.empty_cache()
         
         yield {"status": "LSTM Training Complete.", "progress": 40}
     except Exception as e:
@@ -192,6 +198,10 @@ async def train_trend_generator(ticker: str, df: pd.DataFrame):
         model.fit(X_train, y)
         
         joblib.dump(model, f"{CACHE_DIR}/{ticker}_trend.pkl")
+        
+        del model
+        gc.collect()
+        
         yield {"status": "Trend Classifier Trained.", "progress": 60}
     except Exception as e:
         yield {"status": f"Trend Error: {str(e)}", "progress": 60, "error": True}
@@ -208,6 +218,10 @@ async def train_garch_generator(ticker: str, df: pd.DataFrame):
         am = arch_model(returns, vol='Garch', p=1, q=1, rescale=False)
         res = am.fit(disp='off')
         joblib.dump(res, f"{CACHE_DIR}/{ticker}_garch.pkl")
+        
+        del res
+        gc.collect()
+        
         yield {"status": "GARCH Model Fitted.", "progress": 80}
     except Exception as e:
         yield {"status": f"GARCH Error: {str(e)}", "progress": 80, "error": True}
@@ -244,6 +258,10 @@ async def train_anomaly_generator(ticker: str, df: pd.DataFrame):
         iso = IsolationForest(contamination=0.01, random_state=42)
         iso.fit(X)
         joblib.dump(iso, f"{CACHE_DIR}/{ticker}_anomaly.pkl")
+        
+        del iso
+        gc.collect()
+        
         yield {"status": "Anomaly Detection Complete.", "progress": 95}
     except Exception as e:
         yield {"status": f"Anomaly Error: {str(e)}", "progress": 95, "error": True}
@@ -277,7 +295,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
 
             job_store[job_id] = {"status": f"Fetching data for {ticker}...", "progress": 5}
             
-            df_raw = yf.download(ticker, period="2y", progress=False)
+            df_raw = yf.download(ticker, period="6mo", progress=False)
             if df_raw.empty:
                 job_store[job_id] = {"status": "error", "message": f"No data for {ticker}"}
                 return
@@ -289,7 +307,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 df = df_raw.copy()
 
             df = add_technical_indicators(df)
-            if len(df) < 80:
+            if len(df) < 30:
                  job_store[job_id] = {"status": "error", "message": "Insufficient history."}
                  return
 
@@ -352,10 +370,13 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 model_lstm.eval()
                 scaler_X = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
                 scaler_y = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
-                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-60:]
+                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-30:]
                 X_pred = torch.tensor(np.array([scaler_X.transform(recent)]), dtype=torch.float32)
                 with torch.no_grad(): pred_scaled = model_lstm(X_pred).numpy()
                 pred_price = float(scaler_y.inverse_transform(pred_scaled)[0][0])
+                
+                del model_lstm
+                gc.collect()
             
             predicted_return = (pred_price - current_price) / current_price
             
@@ -367,12 +388,18 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 trend_probs = model_trend.predict_proba(recent_feat)[0]
                 classes = ["Down", "Neutral", "Up"]
                 trend_class = classes[np.argmax(trend_probs)]
+                
+                del model_trend
+                gc.collect()
             
             vol_regime = "medium"
             if os.path.exists(f"{CACHE_DIR}/{ticker}_garch.pkl"):
                 res_garch = joblib.load(f"{CACHE_DIR}/{ticker}_garch.pkl")
                 vol_pred = np.sqrt(res_garch.forecast(horizon=1).variance.values[-1, :])[0]
                 vol_regime = "high" if vol_pred > 2 else "low" if vol_pred < 1 else "medium"
+                
+                del res_garch
+                gc.collect()
             
             sent_score, headlines = get_sentiment(ticker)
             
@@ -424,6 +451,10 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             await create_notification(user_id, "signal", f"ML Signal: {ticker}", f"{final_signal} ({int(confidence)}%)")
             job_store[job_id] = final_res
             
+            # Final cleanup
+            del df
+            gc.collect()
+            
     except Exception as e:
         job_store[job_id] = {
             "status": "error",
@@ -444,7 +475,7 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
                 return
 
         try:
-            df_raw = yf.download(ticker, period="2y", progress=False)
+            df_raw = yf.download(ticker, period="6mo", progress=False)
             if df_raw.empty:
                 yield f"data: {json.dumps({'error': f'No data for {ticker}'})}\n\n"
                 return
@@ -456,7 +487,7 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
                 df = df_raw.copy()
 
             df = add_technical_indicators(df)
-            if len(df) < 80:
+            if len(df) < 30:
                  yield f"data: {json.dumps({'error': 'Insufficient history.'})}\n\n"
                  return
 
@@ -475,10 +506,13 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
                 model_lstm.eval()
                 scaler_X = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
                 scaler_y = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
-                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-60:]
+                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-30:]
                 X_pred = torch.tensor(np.array([scaler_X.transform(recent)]), dtype=torch.float32)
                 with torch.no_grad(): pred_scaled = model_lstm(X_pred).numpy()
                 pred_price = float(scaler_y.inverse_transform(pred_scaled)[0][0])
+                
+                del model_lstm
+                gc.collect()
             
             predicted_return = (pred_price - current_price) / current_price
             
@@ -490,12 +524,18 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
                 trend_probs = model_trend.predict_proba(recent_feat)[0]
                 classes = ["Down", "Neutral", "Up"]
                 trend_class = classes[np.argmax(trend_probs)]
+                
+                del model_trend
+                gc.collect()
             
             vol_regime = "medium"
             if os.path.exists(f"{CACHE_DIR}/{ticker}_garch.pkl"):
                 res_garch = joblib.load(f"{CACHE_DIR}/{ticker}_garch.pkl")
                 vol_pred = np.sqrt(res_garch.forecast(horizon=1).variance.values[-1, :])[0]
                 vol_regime = "high" if vol_pred > 2 else "low" if vol_pred < 1 else "medium"
+                
+                del res_garch
+                gc.collect()
             
             sent_score, headlines = get_sentiment(ticker)
             
@@ -546,6 +586,9 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
             _TRAINING_RESULTS[ticker] = (final_res, datetime.now())
             await create_notification(user_id, "signal", f"ML Signal: {ticker}", f"{final_signal} ({int(confidence)}%)")
             yield f"data: {json.dumps(safe_json(final_res))}\n\n"
+            
+            del df
+            gc.collect()
             
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
