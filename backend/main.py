@@ -90,8 +90,8 @@ app.add_middleware(
 )
 
 @app.get("/health")
-async def health():
-    return {"status": "ok"}
+async def health_check():
+    return {"status": "ok", "service": "rautrex-backend"}
 
 app.include_router(stocks.router, prefix="/api/v1/stocks", tags=["Stocks"])
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market Data"])

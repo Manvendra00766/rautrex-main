@@ -144,7 +144,7 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         y = torch.tensor(np.array(y), dtype=torch.float32)
         
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=64, shuffle=True)
+        loader = DataLoader(dataset, batch_size=32, shuffle=True)
         
         model = LSTMModel(input_dim=len(features))
         criterion = nn.MSELoss()
@@ -167,6 +167,7 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         torch.save(model.state_dict(), f"{CACHE_DIR}/{ticker}_lstm.pth")
         joblib.dump(scaler_X, f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
         joblib.dump(scaler_y, f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
+        gc.collect()
         
         # Explicitly free memory
         del X, y, dataset, loader, model
@@ -198,6 +199,7 @@ async def train_trend_generator(ticker: str, df: pd.DataFrame):
         model.fit(X_train, y)
         
         joblib.dump(model, f"{CACHE_DIR}/{ticker}_trend.pkl")
+        gc.collect()
         
         del model
         gc.collect()
@@ -218,6 +220,7 @@ async def train_garch_generator(ticker: str, df: pd.DataFrame):
         am = arch_model(returns, vol='Garch', p=1, q=1, rescale=False)
         res = am.fit(disp='off')
         joblib.dump(res, f"{CACHE_DIR}/{ticker}_garch.pkl")
+        gc.collect()
         
         del res
         gc.collect()
@@ -258,6 +261,7 @@ async def train_anomaly_generator(ticker: str, df: pd.DataFrame):
         iso = IsolationForest(contamination=0.01, random_state=42)
         iso.fit(X)
         joblib.dump(iso, f"{CACHE_DIR}/{ticker}_anomaly.pkl")
+        gc.collect()
         
         del iso
         gc.collect()
@@ -315,6 +319,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             async for msg in train_lstm_generator(ticker, df):
                 if time.time() - start_time > 180: break
                 job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
+            gc.collect()
             
             if time.time() - start_time > 180:
                 job_store[job_id] = {
@@ -327,6 +332,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             async for msg in train_trend_generator(ticker, df):
                 if time.time() - start_time > 180: break
                 job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
+            gc.collect()
 
             if time.time() - start_time > 180:
                 job_store[job_id] = {
@@ -339,6 +345,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             async for msg in train_garch_generator(ticker, df):
                 if time.time() - start_time > 180: break
                 job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
+            gc.collect()
 
             if time.time() - start_time > 180:
                 job_store[job_id] = {
@@ -351,6 +358,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             async for msg in train_anomaly_generator(ticker, df):
                 if time.time() - start_time > 180: break
                 job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
+            gc.collect()
 
             if time.time() - start_time > 180:
                 job_store[job_id] = {
