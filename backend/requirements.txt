@@ -5,7 +5,6 @@ python-dotenv
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.1.0+cpu
 xgboost
-arch
 vaderSentiment
 yfinance
 scikit-learn
@@ -13,7 +12,6 @@ pandas
 numpy
 joblib
 ta
-redis
 pydantic
 pydantic-settings
 httpx
@@ -22,9 +20,7 @@ sse-starlette
 websockets
 sqlalchemy
 asyncpg
-alembic
 apscheduler
-aiosqlite
 greenlet
 PyJWT
 supabase

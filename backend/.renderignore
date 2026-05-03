@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+models_cache/
+jobs.db
+*.pth
+*.pkl

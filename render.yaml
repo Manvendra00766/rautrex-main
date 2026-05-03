@@ -1,18 +1,9 @@
 services:
   - type: web
-    name: rautrex-backend
-    env: docker
-    plan: free
-    region: ohio
-    dockerContext: backend
-    dockerfilePath: backend/Dockerfile
-    healthCheckPath: /api/v1/health
+    name: rautrex-main
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
     envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_KEY
-        sync: false
-      - key: SECRET_KEY
-        generateValue: true
-      - key: PORT
-        value: 8000
+      - key: PYTHON_VERSION
+        value: 3.11.0

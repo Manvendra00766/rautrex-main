@@ -18,7 +18,6 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import IsolationForest, RandomForestClassifier
 import xgboost as xgb
-from arch import arch_model
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import ta
 from utils import safe_json
@@ -84,11 +83,11 @@ job_store = JobStoreProxy()
 
 # --- 1. PRICE PREDICTION: PyTorch LSTM ---
 class LSTMModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim=32, num_layers=2, output_dim=1):
+    def __init__(self, input_dim, hidden_dim=32, num_layers=1, output_dim=1):
         super(LSTMModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=0.2)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=0.0)
         self.fc = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
@@ -131,7 +130,7 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         data_scaled = scaler_X.fit_transform(data)
         target_scaled = scaler_y.fit_transform(target)
         
-        seq_length = 30
+        seq_length = 20
         if len(data_scaled) <= seq_length:
             raise ValueError(f"Insufficient data for LSTM. Need > {seq_length} points.")
 
@@ -144,7 +143,7 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         y = torch.tensor(np.array(y), dtype=torch.float32)
         
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=32, shuffle=True)
+        loader = DataLoader(dataset, batch_size=16, shuffle=True)
         
         model = LSTMModel(input_dim=len(features))
         criterion = nn.MSELoss()
@@ -166,11 +165,12 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
             
         torch.save(model.state_dict(), f"{CACHE_DIR}/{ticker}_lstm.pth")
         joblib.dump(scaler_X, f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
+        gc.collect()
         joblib.dump(scaler_y, f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
         gc.collect()
         
         # Explicitly free memory
-        del X, y, dataset, loader, model
+        del X, y, dataset, loader, model, optimizer, criterion
         gc.collect()
         torch.cuda.empty_cache()
         
@@ -207,27 +207,6 @@ async def train_trend_generator(ticker: str, df: pd.DataFrame):
         yield {"status": "Trend Classifier Trained.", "progress": 60}
     except Exception as e:
         yield {"status": f"Trend Error: {str(e)}", "progress": 60, "error": True}
-
-async def train_garch_generator(ticker: str, df: pd.DataFrame):
-    yield {"status": "Fitting GARCH(1,1) Volatility Model...", "progress": 70}
-    await asyncio.sleep(0.01)
-    
-    try:
-        returns = 100 * df['Close'].pct_change().dropna()
-        if len(returns) < 100:
-            raise ValueError("Insufficient data for GARCH")
-
-        am = arch_model(returns, vol='Garch', p=1, q=1, rescale=False)
-        res = am.fit(disp='off')
-        joblib.dump(res, f"{CACHE_DIR}/{ticker}_garch.pkl")
-        gc.collect()
-        
-        del res
-        gc.collect()
-        
-        yield {"status": "GARCH Model Fitted.", "progress": 80}
-    except Exception as e:
-        yield {"status": f"GARCH Error: {str(e)}", "progress": 80, "error": True}
 
 def get_sentiment(ticker: str):
     try:
@@ -299,7 +278,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
 
             job_store[job_id] = {"status": f"Fetching data for {ticker}...", "progress": 5}
             
-            df_raw = yf.download(ticker, period="6mo", progress=False)
+            df_raw = yf.download(ticker, period="3mo", progress=False)
             if df_raw.empty:
                 job_store[job_id] = {"status": "error", "message": f"No data for {ticker}"}
                 return
@@ -311,7 +290,7 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 df = df_raw.copy()
 
             df = add_technical_indicators(df)
-            if len(df) < 30:
+            if len(df) < 20:
                  job_store[job_id] = {"status": "error", "message": "Insufficient history."}
                  return
 
@@ -342,19 +321,6 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 }
                 return
 
-            async for msg in train_garch_generator(ticker, df):
-                if time.time() - start_time > 180: break
-                job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
-            gc.collect()
-
-            if time.time() - start_time > 180:
-                job_store[job_id] = {
-                    "status": "complete",
-                    "progress": 100,
-                    "result": {"ticker": ticker, "final_signal": "HOLD", "confidence": 50, "method": "fallback_sma"}
-                }
-                return
-
             async for msg in train_anomaly_generator(ticker, df):
                 if time.time() - start_time > 180: break
                 job_store[job_id] = {"status": msg["status"], "progress": msg["progress"]}
@@ -373,12 +339,12 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
             pred_price = current_price
             
             if os.path.exists(f"{CACHE_DIR}/{ticker}_lstm.pth"):
-                model_lstm = LSTMModel(12)
+                model_lstm = LSTMModel(input_dim=12)
                 model_lstm.load_state_dict(torch.load(f"{CACHE_DIR}/{ticker}_lstm.pth"))
                 model_lstm.eval()
                 scaler_X = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
                 scaler_y = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
-                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-30:]
+                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-20:]
                 X_pred = torch.tensor(np.array([scaler_X.transform(recent)]), dtype=torch.float32)
                 with torch.no_grad(): pred_scaled = model_lstm(X_pred).numpy()
                 pred_price = float(scaler_y.inverse_transform(pred_scaled)[0][0])
@@ -401,14 +367,6 @@ async def run_signal_pipeline(job_id: str, ticker: str, user_id: str):
                 gc.collect()
             
             vol_regime = "medium"
-            if os.path.exists(f"{CACHE_DIR}/{ticker}_garch.pkl"):
-                res_garch = joblib.load(f"{CACHE_DIR}/{ticker}_garch.pkl")
-                vol_pred = np.sqrt(res_garch.forecast(horizon=1).variance.values[-1, :])[0]
-                vol_regime = "high" if vol_pred > 2 else "low" if vol_pred < 1 else "medium"
-                
-                del res_garch
-                gc.collect()
-            
             sent_score, headlines = get_sentiment(ticker)
             
             # Simple Ensemble
@@ -483,7 +441,7 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
                 return
 
         try:
-            df_raw = yf.download(ticker, period="6mo", progress=False)
+            df_raw = yf.download(ticker, period="3mo", progress=False)
             if df_raw.empty:
                 yield f"data: {json.dumps({'error': f'No data for {ticker}'})}\n\n"
                 return
@@ -495,13 +453,12 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
                 df = df_raw.copy()
 
             df = add_technical_indicators(df)
-            if len(df) < 30:
+            if len(df) < 20:
                  yield f"data: {json.dumps({'error': 'Insufficient history.'})}\n\n"
                  return
 
             async for msg in train_lstm_generator(ticker, df): yield f"data: {json.dumps(msg)}\n\n"
             async for msg in train_trend_generator(ticker, df): yield f"data: {json.dumps(msg)}\n\n"
-            async for msg in train_garch_generator(ticker, df): yield f"data: {json.dumps(msg)}\n\n"
             async for msg in train_anomaly_generator(ticker, df): yield f"data: {json.dumps(msg)}\n\n"
             
             # --- Inference ---
@@ -509,12 +466,12 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
             pred_price = current_price
             
             if os.path.exists(f"{CACHE_DIR}/{ticker}_lstm.pth"):
-                model_lstm = LSTMModel(12)
+                model_lstm = LSTMModel(input_dim=12)
                 model_lstm.load_state_dict(torch.load(f"{CACHE_DIR}/{ticker}_lstm.pth"))
                 model_lstm.eval()
                 scaler_X = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_X.pkl")
                 scaler_y = joblib.load(f"{CACHE_DIR}/{ticker}_scaler_y.pkl")
-                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-30:]
+                recent = df[['Open', 'High', 'Low', 'Close', 'Volume', 'rsi', 'macd', 'macd_signal', 'bb_high', 'bb_low', 'atr', 'obv']].values[-20:]
                 X_pred = torch.tensor(np.array([scaler_X.transform(recent)]), dtype=torch.float32)
                 with torch.no_grad(): pred_scaled = model_lstm(X_pred).numpy()
                 pred_price = float(scaler_y.inverse_transform(pred_scaled)[0][0])
@@ -537,14 +494,6 @@ async def run_ml_pipeline_stream(ticker: str, user_id: str):
                 gc.collect()
             
             vol_regime = "medium"
-            if os.path.exists(f"{CACHE_DIR}/{ticker}_garch.pkl"):
-                res_garch = joblib.load(f"{CACHE_DIR}/{ticker}_garch.pkl")
-                vol_pred = np.sqrt(res_garch.forecast(horizon=1).variance.values[-1, :])[0]
-                vol_regime = "high" if vol_pred > 2 else "low" if vol_pred < 1 else "medium"
-                
-                del res_garch
-                gc.collect()
-            
             sent_score, headlines = get_sentiment(ticker)
             
             # Simple Ensemble
@@ -605,7 +554,7 @@ async def scan_market():
     tickers = ["AAPL", "MSFT", "GOOGL", "NVDA", "AMZN", "META", "TSLA", "NFLX", "AMD", "COIN"]
     results = []
     try:
-        data = yf.download(tickers, period="1mo", progress=False)
+        data = yf.download(tickers, period="2w", progress=False)
         if 'Close' in data.columns:
             prices = data['Close']
         else:
