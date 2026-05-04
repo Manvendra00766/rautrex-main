@@ -239,24 +239,32 @@ def _download_history_sync(symbols: List[str], start: str, end: str) -> Dict[str
     if not symbols:
         return {}
 
+    # group_by="ticker" is useful for multiple symbols but requires careful parsing
     raw = yf.download(symbols, start=start, end=end, progress=False, auto_adjust=False, group_by="ticker")
     if raw.empty:
         return {}
 
-    histories: Dict[str, pd.Series] = {}
+    # Defensive: Flatten MultiIndex index if present (sometimes happens with yfinance versions/options)
+    if isinstance(raw.index, pd.MultiIndex):
+        # Use 'Date' level if it exists, otherwise first level
+        date_level = "Date" if "Date" in raw.index.names else 0
+        raw.index = raw.index.get_level_values(date_level)
 
-    if len(symbols) == 1:
-        close_series = raw["Close"] if "Close" in raw else raw.squeeze()
-        histories[symbols[0]] = close_series.dropna()
-        return histories
+    histories: Dict[str, pd.Series] = {}
 
     for symbol in symbols:
         try:
             if isinstance(raw.columns, pd.MultiIndex):
-                close_series = raw[symbol]["Close"].dropna()
+                # If group_by='ticker', symbol is at level 0
+                if symbol in raw.columns.levels[0]:
+                    ticker_df = raw[symbol]
+                    # Get Close or first available column
+                    close_series = ticker_df["Close"] if "Close" in ticker_df.columns else ticker_df.iloc[:, 0]
+                    histories[symbol] = close_series.dropna()
             else:
-                close_series = raw["Close"].dropna()
-            histories[symbol] = close_series
+                # Flat columns
+                close_series = raw["Close"] if "Close" in raw.columns else raw.iloc[:, 0]
+                histories[symbol] = close_series.dropna()
         except Exception:
             continue
     return histories

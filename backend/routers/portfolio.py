@@ -68,22 +68,8 @@ async def portfolio_overview(
         print(f"Error in portfolio_overview: {e}")
         print(traceback.format_exc())
         
-        # Fallback response as requested by user to prevent 500 crashes
-        fallback = {
-            "nav": 0.0,
-            "cash_balance": 0.0,
-            "daily_pnl": 0.0,
-            "unrealized_pnl": 0.0,
-            "holdings": [],
-            "history": [],
-            "portfolio": None,
-            "summary": None,
-            "positions": [],
-            "equity_curve": [],
-            "allocation": {"by_sector": [], "by_asset_type": [], "by_country": []},
-            "warnings": [],
-        }
-        return JSONResponse(content=safe_json(fallback))
+        # Propagate as 500 to surface the error, as requested
+        raise HTTPException(status_code=500, detail=f"Portfolio overview failed: {str(e)}")
 
 
 @router.post("/transactions")

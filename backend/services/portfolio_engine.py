@@ -527,7 +527,15 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
     await sync_portfolio_positions_snapshot(portfolio_id, state["positions"])
 
     summary_metrics = compute_equity_metrics(equity_curve)
-    beta = await compute_beta_vs_benchmark(equity_curve, portfolio.get("benchmark_symbol") or "SPY")
+    
+    beta_err = None
+    try:
+        beta = await compute_beta_vs_benchmark(equity_curve, portfolio.get("benchmark_symbol") or "SPY")
+    except Exception as e:
+        print(f"Error calculating beta for portfolio {portfolio_id}: {e}")
+        beta = None
+        beta_err = f"Beta calculation failed: {str(e)}"
+
     exposure = compute_exposure_metrics(state["positions"], state["total_nav"])
     concentration = compute_concentration_metrics(state["positions"])
 
@@ -560,6 +568,8 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
 
     allocation = summarize_allocation(state["positions"], state["total_market_value"])
     warnings = build_warnings(state["positions"], state["cash_balance"], state["total_nav"])
+    if beta_err:
+        warnings.append(beta_err)
 
     return {
         "portfolio": {

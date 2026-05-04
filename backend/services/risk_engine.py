@@ -41,12 +41,28 @@ async def compute_beta_vs_benchmark(
             benchmark_df.columns = ["close"]
     else:
         benchmark_df = benchmark_series.to_frame(name="close")
-        
-    benchmark_df.index = pd.to_datetime(benchmark_df.index).normalize()
+    
+    # Defensive normalization: Fix MultiIndex or tuple indices
+    if isinstance(benchmark_df.index, pd.MultiIndex):
+        # Try to find a level named Date or default to level 0
+        date_level = "Date" if "Date" in benchmark_df.index.names else 0
+        benchmark_df.index = benchmark_df.index.get_level_values(date_level)
+    
+    # Coerce to datetime and drop NaTs, stripping timezones for join compatibility
+    benchmark_df.index = pd.to_datetime(benchmark_df.index, errors="coerce").tz_localize(None)
+    benchmark_df = benchmark_df[benchmark_df.index.notnull()]
+    
+    # Normalize to midnight
+    benchmark_df.index = benchmark_df.index.normalize()
+    
+    # Sort and remove duplicates
+    benchmark_df = benchmark_df.sort_index()
+    benchmark_df = benchmark_df[~benchmark_df.index.duplicated(keep="last")]
+    
     benchmark_returns = benchmark_df["close"].pct_change().dropna()
 
     nav_df = nav_returns.to_frame(name="portfolio")
-    nav_df.index = pd.to_datetime(df["snapshot_date"].iloc[1:]).dt.normalize()
+    nav_df.index = pd.to_datetime(df["snapshot_date"].iloc[1:]).dt.tz_localize(None).dt.normalize()
     merged = nav_df.join(benchmark_returns.to_frame(name="benchmark"), how="inner").dropna()
     if len(merged) < 3:
         return 0.0
