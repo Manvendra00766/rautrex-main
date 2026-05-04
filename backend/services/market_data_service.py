@@ -1,14 +1,66 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
+import time
 from datetime import date, timedelta
 from typing import Any, Dict, List
 
 import pandas as pd
 import yfinance as yf
+from cachetools import TTLCache
 
 from services.pricing_engine import get_batch_price_snapshots, get_price_snapshot, get_quote_payload, normalize_symbol
 from utils import safe_json
+
+# Setup logging
+logger = logging.getLogger(__name__)
+
+# Cache and Lock for thread-safety
+info_cache = TTLCache(maxsize=200, ttl=300)
+info_lock = threading.Lock()
+
+def get_ticker_info(ticker_symbol: str) -> Dict[str, Any]:
+    """
+    Fetch ticker info with thread-safe caching and exponential backoff retries 
+    to handle YFRateLimitError and 401 Crumb errors.
+    """
+    with info_lock:
+        if ticker_symbol in info_cache:
+            return info_cache[ticker_symbol]
+
+    retries = 3
+    base_delay = 2.0
+    
+    for attempt in range(retries):
+        try:
+            ticker_obj = yf.Ticker(ticker_symbol)
+            info = ticker_obj.info
+            if info:
+                with info_lock:
+                    info_cache[ticker_symbol] = info
+                return info
+            return {}
+        except Exception as e:
+            err_msg = str(e).lower()
+            is_rate_limit = "too many requests" in err_msg or "rate limit" in err_msg
+            is_crumb_error = "401" in err_msg or "crumb" in err_msg
+            
+            # Use yfinance exception if available in runtime
+            if hasattr(yf.exceptions, "YFRateLimitError") and isinstance(e, yf.exceptions.YFRateLimitError):
+                is_rate_limit = True
+
+            if (is_rate_limit or is_crumb_error) and attempt < retries - 1:
+                delay = base_delay * (2 ** attempt)
+                logger.warning(f"Yahoo Finance error ({e}) for {ticker_symbol}. Retrying in {delay}s... (Attempt {attempt + 1}/{retries})")
+                time.sleep(delay)
+                continue
+            
+            logger.error(f"Final failure fetching info for {ticker_symbol}: {e}")
+            break
+            
+    return {}
 
 
 LIQUID_UNIVERSE = [
@@ -84,8 +136,7 @@ def _search_sync(query: str) -> List[Dict[str, Any]]:
 
     symbol = normalize_symbol(query)
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info or {}
+        info = get_ticker_info(symbol)
         return [
             {
                 "ticker": symbol,
@@ -131,7 +182,7 @@ async def get_fundamentals(ticker: str):
     loop = asyncio.get_event_loop()
 
     def _fetch():
-        info = yf.Ticker(ticker).info or {}
+        info = get_ticker_info(ticker)
         return {
             "pe_ratio": info.get("trailingPE"),
             "forward_pe": info.get("forwardPE"),
@@ -178,7 +229,7 @@ async def get_info(ticker: str):
     loop = asyncio.get_event_loop()
 
     def _fetch():
-        info = yf.Ticker(ticker).info or {}
+        info = get_ticker_info(ticker)
         return {
             "name": info.get("longName") or info.get("shortName") or ticker,
             "sector": info.get("sector") or quote.sector,
