@@ -61,7 +61,7 @@ export function Sidebar() {
 
   return (
     <aside className={cn(
-      "h-full bg-[var(--sidebar-bg)] border-r border-[var(--border)] flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative group/sidebar",
+      "hidden md:flex h-full bg-[var(--sidebar-bg)] border-r border-[var(--border)] flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative group/sidebar",
       isCollapsed ? "w-[64px]" : "w-[240px]"
     )}>
       {/* COLLAPSE TOGGLE */}
