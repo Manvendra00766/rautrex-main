@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from services import notification_service
 from supabase_client import supabase
-from dependencies import get_current_user
+from auth import get_current_user
 
 import traceback
 

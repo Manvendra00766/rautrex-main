@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { Bell, Check, Trash2, BrainCircuit, Activity, ShieldAlert, Newspaper, Terminal } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { useAuthStore } from "@/lib/auth-store";
 import { useToast } from "@/components/ui/Toast";
-import { apiFetch } from "@/lib/api";
 import {
   Popover,
   PopoverContent,
@@ -23,27 +22,54 @@ export default function NotificationBell() {
   
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(false);
-
-  const fetchNotifications = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const data = await apiFetch("/notifications/");
-      setNotifications(data || []);
-      
-      const countData = await apiFetch("/notifications/unread-count");
-      setUnreadCount(countData.unread_count || 0);
-    } catch (err) {
-      console.error("Failed to fetch notifications", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
 
   useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return; // Don't call if no session
+        
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+        
+        // Fetch Notifications
+        const response = await fetch(
+          `${baseUrl}/notifications/`,
+          {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        if (response.status === 401) return; // Silent fail
+        
+        const data = await response.json();
+        setNotifications(Array.isArray(data) ? data : []);
+
+        // Fetch Unread Count
+        const countRes = await fetch(
+          `${baseUrl}/notifications/unread-count`,
+          {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        if (countRes.ok) {
+          const countData = await countRes.json();
+          setUnreadCount(countData.unread_count || 0);
+        }
+      } catch (error) {
+        console.error('Notifications fetch failed:', error);
+        // Silent fail - don't break the UI
+      }
+    };
+    
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [supabase.auth]);
 
   useEffect(() => {
     if (!user) return;
@@ -78,19 +104,40 @@ export default function NotificationBell() {
 
   const markAllRead = async () => {
     try {
-      await apiFetch("/notifications/read-all", { method: 'PATCH' });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      await fetch(`${baseUrl}/notifications/read-all`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
       toast({ type: 'success', title: 'Success', description: 'All notifications marked as read.' });
     } catch (err) {
       console.error("Failed to mark all read", err);
-      toast({ type: 'error', title: 'Error', description: 'Failed to mark all as read.' });
     }
   };
 
   const markRead = async (id: string) => {
     try {
-      await apiFetch(`/notifications/${id}/read`, { method: 'PATCH' });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      await fetch(`${baseUrl}/notifications/${id}/read`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );
@@ -103,7 +150,18 @@ export default function NotificationBell() {
   const deleteNotif = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     try {
-      await apiFetch(`/notifications/${id}`, { method: 'DELETE' });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      await fetch(`${baseUrl}/notifications/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       const notif = notifications.find(n => n.id === id);
       if (notif && !notif.is_read) {
@@ -111,7 +169,6 @@ export default function NotificationBell() {
       }
     } catch (err) {
       console.error("Failed to delete notification", err);
-      toast({ type: 'error', title: 'Error', description: 'Failed to delete notification.' });
     }
   };
 

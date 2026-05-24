@@ -14,6 +14,50 @@ from supabase_client import supabase
 UTC = timezone.utc
 DEFAULT_CACHE_TTL_SECONDS = 300
 
+# FIXED: Fallback mapping for popular tickers when yfinance returns empty sector info
+SECTOR_MAP = {
+    # Information Technology
+    "AAPL": "Information Technology", "MSFT": "Information Technology",
+    "NVDA": "Information Technology", "AMD": "Information Technology",
+    "INTC": "Information Technology", "GOOGL": "Information Technology",
+    "META": "Information Technology", "CRM": "Information Technology",
+    "ADBE": "Information Technology", "ORCL": "Information Technology",
+    "IBM": "Information Technology", "TXN": "Information Technology",
+    # Consumer Discretionary
+    "TSLA": "Consumer Discretionary", "AMZN": "Consumer Discretionary",
+    "NKE": "Consumer Discretionary", "MCD": "Consumer Discretionary",
+    "SBUX": "Consumer Discretionary", "HD": "Consumer Discretionary",
+    "LOW": "Consumer Discretionary", "TGT": "Consumer Discretionary",
+    # Financials
+    "JPM": "Financials", "BAC": "Financials", "GS": "Financials",
+    "MS": "Financials", "WFC": "Financials", "C": "Financials",
+    "BRK-B": "Financials", "AXP": "Financials", "V": "Financials", "MA": "Financials",
+    # Healthcare
+    "JNJ": "Healthcare", "PFE": "Healthcare", "UNH": "Healthcare",
+    "ABBV": "Healthcare", "MRK": "Healthcare", "LLY": "Healthcare",
+    "TMO": "Healthcare", "ABT": "Healthcare", "BMY": "Healthcare",
+    # Energy
+    "XOM": "Energy", "CVX": "Energy", "COP": "Energy",
+    "SLB": "Energy", "EOG": "Energy", "PSX": "Energy",
+    # Industrials
+    "GE": "Industrials", "BA": "Industrials", "CAT": "Industrials",
+    "MMM": "Industrials", "HON": "Industrials", "UPS": "Industrials",
+    "RTX": "Industrials", "LMT": "Industrials",
+    # Communication Services
+    "NFLX": "Communication Services", "DIS": "Communication Services",
+    "T": "Communication Services", "VZ": "Communication Services",
+    "CMCSA": "Communication Services",
+    # Consumer Staples
+    "PG": "Consumer Staples", "KO": "Consumer Staples", "PEP": "Consumer Staples",
+    "WMT": "Consumer Staples", "COST": "Consumer Staples", "CL": "Consumer Staples",
+    # Materials
+    "LIN": "Materials", "APD": "Materials", "ECL": "Materials", "NEM": "Materials",
+    # Real Estate
+    "AMT": "Real Estate", "PLD": "Real Estate", "CCI": "Real Estate",
+    # Utilities
+    "NEE": "Utilities", "DUK": "Utilities", "SO": "Utilities", "D": "Utilities",
+}
+
 
 @dataclass
 class PriceSnapshot:
@@ -183,8 +227,8 @@ def _fetch_quote_sync(symbol: str) -> Optional[PriceSnapshot]:
         asset_type=asset_type,
         currency=info.get("currency") or "USD",
         exchange=info.get("exchange") or info.get("fullExchangeName"),
-        sector=info.get("sector"),
-        country=info.get("country"),
+        sector=info.get("sector") or SECTOR_MAP.get(symbol.upper(), "Other"),
+        country=info.get("country") or "US",
         market_cap=_safe_float(info.get("marketCap")),
         previous_close=previous_close,
         last_price=last_price,
@@ -221,15 +265,90 @@ async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_T
 async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int = DEFAULT_CACHE_TTL_SECONDS) -> Dict[str, PriceSnapshot]:
     normalized = [normalize_symbol(symbol) for symbol in symbols if symbol]
     unique_symbols = list(dict.fromkeys(normalized))
-    results = await asyncio.gather(
-        *[get_price_snapshot(symbol, max_age_seconds=max_age_seconds) for symbol in unique_symbols],
-        return_exceptions=True
-    )
+    if not unique_symbols:
+        return {}
 
+    # 1. Try to get all from cache
     mapping: Dict[str, PriceSnapshot] = {}
-    for symbol, res in zip(unique_symbols, results):
-        if isinstance(res, PriceSnapshot):
-            mapping[symbol] = res
+    try:
+        response = supabase.table("market_cache").select("*").in_("symbol", unique_symbols).execute()
+        cached_rows = response.data or []
+        now = _utcnow()
+        for row in cached_rows:
+            snap = _parse_cached_snapshot(row)
+            if snap and (now - snap.fetched_at).total_seconds() <= max_age_seconds:
+                mapping[snap.symbol] = snap
+    except Exception as e:
+        print(f"Error reading batch cache: {e}")
+
+    # 2. Identify symbols needing refresh
+    missing = [s for s in unique_symbols if s not in mapping]
+    if not missing:
+        return mapping
+
+    # 3. Batch download missing symbols
+    loop = asyncio.get_event_loop()
+    try:
+        # Fetch 5 days to ensure we have previous close
+        raw = await loop.run_in_executor(
+            None, 
+            lambda: yf.download(missing, period="5d", interval="1d", progress=False, auto_adjust=False, group_by="ticker")
+        )
+        
+        if raw.empty:
+            return mapping
+
+        now = _utcnow()
+        for symbol in missing:
+            try:
+                if len(missing) == 1:
+                    ticker_df = raw
+                else:
+                    if symbol not in raw.columns.levels[0]:
+                        continue
+                    ticker_df = raw[symbol]
+                
+                closes = ticker_df["Close"].dropna()
+                if closes.empty:
+                    continue
+
+                last_price = float(closes.iloc[-1])
+                # Try to get previous close from history, fallback to last_price
+                prev_close = float(closes.iloc[-2]) if len(closes) > 1 else last_price
+                
+                change_amount = last_price - prev_close
+                change_percent = (change_amount / prev_close) * 100 if prev_close else 0.0
+                
+                # For batch download, we don't get full info (sector, etc.) 
+                # We try to keep existing metadata from cache if available
+                existing = mapping.get(symbol)
+                
+                new_snap = PriceSnapshot(
+                    symbol=symbol,
+                    name=existing.name if existing else symbol,
+                    asset_type=existing.asset_type if existing else infer_asset_type(symbol),
+                    currency=existing.currency if existing else "USD",
+                    exchange=existing.exchange if existing else None,
+                    sector=existing.sector if (existing and existing.sector and existing.sector != "Other") else SECTOR_MAP.get(symbol.upper(), "Other"),
+                    country=existing.country if (existing and existing.country) else "US",
+                    market_cap=existing.market_cap if existing else None,
+                    previous_close=prev_close,
+                    last_price=last_price,
+                    change_amount=change_amount,
+                    change_percent=change_percent,
+                    volume=_safe_int(ticker_df["Volume"].iloc[-1]) if "Volume" in ticker_df else None,
+                    source="yfinance-batch",
+                    fetched_at=now,
+                    raw=existing.raw if existing else {},
+                )
+                mapping[symbol] = new_snap
+                # Background task to update cache
+                asyncio.create_task(upsert_cached_price(new_snap))
+            except Exception as e:
+                print(f"Error processing batch result for {symbol}: {e}")
+                continue
+    except Exception as e:
+        print(f"Batch download failed: {e}")
 
     return mapping
 

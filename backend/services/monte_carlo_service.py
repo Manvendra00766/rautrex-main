@@ -5,6 +5,12 @@ from typing import List, Optional
 import asyncio
 from utils import safe_json
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def yf_download_with_retry(*args, **kwargs):
+    return yf.download(*args, **kwargs)
+
 # Simple cache for simulation results
 _MC_CACHE = {}
 
@@ -33,7 +39,7 @@ def _compute_simulation(tickers, weights, time_horizon, num_simulations, initial
     if initial_investment <= 0: initial_investment = 1000.0
     
     try:
-        raw_data = yf.download(tickers, period="2y", progress=False)
+        raw_data = yf_download_with_retry(tickers, period="2y", progress=False)
         if raw_data.empty:
             raise ValueError(f"No historical data found for tickers: {tickers}")
         
@@ -85,6 +91,12 @@ def _compute_simulation(tickers, weights, time_horizon, num_simulations, initial
     sigma_ann = sigma_daily * np.sqrt(252)
 
     # Realistic calibration
+    validation_warnings = []
+    if abs(mu_ann) > 0.50:
+        validation_warnings.append("mu capped")
+    if sigma_ann > 1.0 or sigma_ann < 0.05:
+        validation_warnings.append("sigma capped")
+
     mu_capped = max(min(mu_ann, 0.50), -0.50)
     sigma_capped = max(min(sigma_ann, 1.0), 0.05)
     
@@ -140,6 +152,7 @@ def _compute_simulation(tickers, weights, time_horizon, num_simulations, initial
             "p95": p95.tolist(),
         },
         "sampled_paths": sampled_paths.T.tolist(),
-        "histogram": histogram_data
+        "histogram": histogram_data,
+        "validation_warnings": validation_warnings
     }
     return safe_json(res)

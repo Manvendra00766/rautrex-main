@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import NotificationBell from "./NotificationBell";
 import { useMarketStore } from "@/lib/market-store";
 import { cn } from "@/lib/utils";
+import { useHasMounted } from "@/lib/hooks";
 
 export default function Topbar() {
   const [query, setQuery] = useState("");
@@ -23,6 +24,7 @@ export default function Topbar() {
   const { setActiveTicker } = useMarketStore();
   const supabase = createClient();
   const router = useRouter();
+  const hasMounted = useHasMounted();
 
   const handleSelect = (ticker: string) => {
     setActiveTicker(ticker);
@@ -92,13 +94,17 @@ export default function Topbar() {
         <Popover>
           <PopoverTrigger asChild>
             <button className="w-8 h-8 rounded-full bg-accent-secondary/20 border border-accent-secondary/30 flex items-center justify-center text-accent-secondary font-black text-xs hover:opacity-80 transition-opacity">
-              {user ? getInitials(user) : <User size={14} />}
+              {hasMounted && user ? getInitials(user) : <User size={14} />}
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2 bg-surface border-white/10 text-white shadow-2xl rounded-2xl" align="end">
             <div className="px-2 py-2 mb-2 border-b border-white/5">
-              <p className="text-xs font-bold truncate uppercase tracking-widest">{user?.user_metadata?.full_name || "Quant Trader"}</p>
-              <p className="text-[10px] text-gray-500 truncate font-mono">{user?.email}</p>
+              <p className="text-xs font-bold truncate uppercase tracking-widest">
+                {hasMounted ? (user?.user_metadata?.full_name || "Quant Trader") : "Loading..."}
+              </p>
+              <p className="text-[10px] text-gray-500 truncate font-mono">
+                {hasMounted ? user?.email : "..."}
+              </p>
             </div>
             <Button 
               variant="ghost" 

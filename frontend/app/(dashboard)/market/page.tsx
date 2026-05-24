@@ -316,7 +316,7 @@ export default function MarketHub() {
               </DragDropContext>
            </div>
 
-           <div className="glass-panel p-4 rounded-2xl flex flex-col h-[400px]">
+           <div className="glass-panel p-4 rounded-2xl flex flex-col h-auto">
               <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-4 flex items-center gap-2"><TrendingUp size={14} className="text-accent" /> Market Movers</h3>
               <Tabs defaultValue="gainers" className="w-full flex-1 flex flex-col">
                 <TabsList className="grid grid-cols-3 bg-surface border border-white/5 h-8 mb-4">

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from services import alert_service
 from pydantic import BaseModel
-from dependencies import get_current_user
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["Price Alerts"])
 
@@ -10,14 +10,14 @@ class AlertCreate(BaseModel):
     condition: str
     target_price: float
 
-@router.post("/")
+@router.post("/", status_code=201)
 async def create_new_alert(alert: AlertCreate, current_user = Depends(get_current_user)):
     response = await alert_service.create_alert(current_user.id, alert.ticker, alert.condition, alert.target_price)
     return response.data
 
 @router.get("/")
 async def get_my_alerts(current_user = Depends(get_current_user)):
-    response = await alert_service.get_user_alerts(current_user.id)
+    response = await alert_service.get_alerts(current_user.id)
     return response.data
 
 @router.delete("/{alert_id}")

@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, List
 import asyncio
 from services.backtester_service import _backtest_sync
-from dependencies import get_current_user
+from auth import get_current_user
 
 router = APIRouter()
 

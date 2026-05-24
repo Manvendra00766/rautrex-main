@@ -70,7 +70,11 @@ class JobStoreProxy:
         return job
     
     def __setitem__(self, key, value):
-        set_job(key, value)
+        existing = get_job(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            set_job(key, {**existing, **value})
+        else:
+            set_job(key, value)
     
     def get(self, key, default=None):
         job = get_job(key)
@@ -115,6 +119,21 @@ def add_technical_indicators(df):
         print(f"Indicator calculation error: {e}")
         return df
 
+def _train_lstm_epoch_sync(model, loader, optimizer, criterion):
+    model.train()
+    for batch_X, batch_y in loader:
+        optimizer.zero_grad()
+        outputs = model(batch_X)
+        loss = criterion(outputs, batch_y)
+        loss.backward()
+        optimizer.step()
+
+def _fit_xgb_sync(model, X_train, y):
+    model.fit(X_train, y)
+
+def _fit_iso_sync(iso, X):
+    iso.fit(X)
+
 async def train_lstm_generator(ticker: str, df: pd.DataFrame):
     yield {"status": "Processing data for LSTM...", "progress": 10}
     await asyncio.sleep(0.01)
@@ -151,13 +170,7 @@ async def train_lstm_generator(ticker: str, df: pd.DataFrame):
         
         epochs = 2 
         for epoch in range(epochs):
-            model.train()
-            for batch_X, batch_y in loader:
-                optimizer.zero_grad()
-                outputs = model(batch_X)
-                loss = criterion(outputs, batch_y)
-                loss.backward()
-                optimizer.step()
+            await asyncio.to_thread(_train_lstm_epoch_sync, model, loader, optimizer, criterion)
             
             progress = 10 + int((epoch + 1) / epochs * 30)
             yield {"status": f"Training LSTM Epoch {epoch+1}/{epochs}", "progress": progress}
@@ -196,7 +209,7 @@ async def train_trend_generator(ticker: str, df: pd.DataFrame):
 
         X_train = X[:len(y)]
         model = xgb.XGBClassifier(n_estimators=50, max_depth=3, learning_rate=0.1)
-        model.fit(X_train, y)
+        await asyncio.to_thread(_fit_xgb_sync, model, X_train, y)
         
         joblib.dump(model, f"{CACHE_DIR}/{ticker}_trend.pkl")
         gc.collect()
@@ -238,7 +251,7 @@ async def train_anomaly_generator(ticker: str, df: pd.DataFrame):
         features = ['Close', 'Volume', 'atr']
         X = df[features].values
         iso = IsolationForest(contamination=0.01, random_state=42)
-        iso.fit(X)
+        await asyncio.to_thread(_fit_iso_sync, iso, X)
         joblib.dump(iso, f"{CACHE_DIR}/{ticker}_anomaly.pkl")
         gc.collect()
         

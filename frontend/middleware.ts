@@ -1,10 +1,10 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
+export async function middleware(req: NextRequest) {
+  let res = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: req.headers,
     },
   })
 
@@ -14,37 +14,37 @@ export async function middleware(request: NextRequest) {
     {
       cookies: {
         get(name: string) {
-          return request.cookies.get(name)?.value
+          return req.cookies.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
+          req.cookies.set({
             name,
             value,
             ...options,
           })
-          response = NextResponse.next({
+          res = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: req.headers,
             },
           })
-          response.cookies.set({
+          res.cookies.set({
             name,
             value,
             ...options,
           })
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({
+          req.cookies.set({
             name,
             value: '',
             ...options,
           })
-          response = NextResponse.next({
+          res = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: req.headers,
             },
           })
-          response.cookies.set({
+          res.cookies.set({
             name,
             value: '',
             ...options,
@@ -54,48 +54,40 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // This will refresh session if expired - critical for SSR
   const { data: { session } } = await supabase.auth.getSession()
 
-  // Protected routes
-  const protectedPaths = [
-    '/market',
-    '/portfolio',
-    '/backtest',
-    '/monte-carlo',
-    '/signals',
-    '/risk',
-    '/options',
-    '/dashboard'
-  ]
+  const isAuthPage = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/signup')
+  const isProtectedPage = req.nextUrl.pathname.startsWith('/dashboard') || 
+                          req.nextUrl.pathname.startsWith('/portfolio') ||
+                          req.nextUrl.pathname.startsWith('/market') ||
+                          req.nextUrl.pathname.startsWith('/backtest') ||
+                          req.nextUrl.pathname.startsWith('/signals')
 
-  const isProtected = protectedPaths.some(path => 
-    request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(`${path}/`)
-  )
-
-  // Auth routes (redirect to home if already logged in)
-  const authPaths = ['/login', '/signup', '/forgot-password', '/reset-password']
-  const isAuthPath = authPaths.some(path => request.nextUrl.pathname.startsWith(path))
-
-  if (isProtected && !session) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // If no session and on protected page → go to login
+  if (!session && isProtectedPage) {
+    const redirectUrl = new URL('/login', req.url)
+    redirectUrl.searchParams.set('expired', 'true')
+    return NextResponse.redirect(redirectUrl)
   }
-
-  if (isAuthPath && session) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+  
+  // If has session and on auth page → go to dashboard
+  if (session && isAuthPage) {
+    return NextResponse.redirect(new URL('/dashboard', req.url))
   }
-
-  return response
+  
+  // CRITICAL: return res with updated session cookies
+  return res
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+    '/dashboard/:path*',
+    '/portfolio/:path*',
+    '/market/:path*',
+    '/backtest/:path*',
+    '/signals/:path*',
+    '/login',
+    '/signup',
+  ]
 }

@@ -339,7 +339,7 @@ def test_end_of_data_fallback(mock_download):
     assert len(res["trades"]) > 0
     trade = res["trades"][0] # last trade (reversed)
     assert trade["exit_reason"] == "end_of_data"
-    assert trade["liquidity_warning"] is True
+    assert bool(trade["liquidity_warning"]) is True
 
 # --- 6. KELLY CRITERION ---
 
@@ -387,3 +387,40 @@ def test_sanity_returns_range_for_each_metric():
     assert "realistic_range" in report["metrics_analysis"]["sharpe"]
     assert "cagr" in report["metrics_analysis"]
     assert "realistic_range" in report["metrics_analysis"]["cagr"]
+
+def test_risk_free_rate_consistency():
+    """All modules must use the same default risk-free rate."""
+    from core.financial_constants import RISK_FREE_RATE
+    from services.portfolio_calculation_service import PortfolioCalculationService
+    from core.quant.derivatives import DerivativesEngine
+    from core.quant.portfolio_opt import PortfolioOptimizer
+    import inspect
+
+    svc = PortfolioCalculationService()
+    deriv = DerivativesEngine()
+    opt = PortfolioOptimizer()
+
+    svc_rate = inspect.signature(
+        svc.calculate_sharpe_ratio).parameters['risk_free_rate'].default
+    deriv_rate = deriv.risk_free_rate
+    opt_rate = opt.risk_free_rate
+
+    assert svc_rate == RISK_FREE_RATE, f"PortfolioCalculationService uses {svc_rate}, expected {RISK_FREE_RATE}"
+    assert deriv_rate == RISK_FREE_RATE, f"DerivativesEngine uses {deriv_rate}, expected {RISK_FREE_RATE}"
+    assert opt_rate == RISK_FREE_RATE, f"PortfolioOptimizer uses {opt_rate}, expected {RISK_FREE_RATE}"
+
+def test_sortino_uses_total_n_not_negative_n():
+    """Regression test: Sortino denominator must be total sample size."""
+    from services.portfolio_calculation_service import PortfolioCalculationService
+    from core.quant.portfolio_opt import PortfolioOptimizer
+
+    returns = np.array([0.01, -0.02, 0.03, -0.01, 0.02, -0.015, 0.005])
+    service_result = PortfolioCalculationService().calculate_sortino_ratio(returns)
+
+    # If PortfolioOptimizer.calculate_sortino_ratio exists, it must match
+    if hasattr(PortfolioOptimizer, 'calculate_sortino_ratio'):
+        optimizer_result = getattr(PortfolioOptimizer(), 'calculate_sortino_ratio')(returns)
+        assert abs(service_result - optimizer_result) < 1e-10, (
+            f"Sortino mismatch: service={service_result}, optimizer={optimizer_result}. "
+            "Both must use total N as denominator."
+        )

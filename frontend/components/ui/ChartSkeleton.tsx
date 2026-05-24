@@ -11,11 +11,11 @@ interface ChartSkeletonProps {
 export const ChartSkeleton: React.FC<ChartSkeletonProps> = ({ type = 'line', className }) => {
   return (
     <div className={cn(
-      "w-full h-full flex flex-col items-center justify-center bg-[#0d0d14] rounded-2xl p-6 relative overflow-hidden",
+      "w-full h-full flex flex-col items-center justify-center bg-surface rounded-2xl p-6 relative overflow-hidden",
       className
     )}>
       {/* Pulse Animation Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" 
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-muted/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" 
            style={{ backgroundSize: '200% 100%' }} />
 
       {type === 'line' && (
@@ -49,7 +49,7 @@ export const ChartSkeleton: React.FC<ChartSkeletonProps> = ({ type = 'line', cla
           }
         }
         .bg-border-tertiary {
-          background-color: rgba(255, 255, 255, 0.06);
+          background-color: var(--border);
         }
       `}</style>
     </div>

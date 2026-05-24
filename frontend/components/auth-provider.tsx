@@ -14,9 +14,25 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       setUser(session?.user ?? null)
       setIsLoading(false)
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         setUser(session?.user ?? null)
         setIsLoading(false)
+
+        // Log auth state changes for debugging
+        switch (event) {
+          case 'TOKEN_REFRESHED':
+            console.log('[Auth] Token refreshed successfully at', new Date().toISOString())
+            break
+          case 'SIGNED_OUT':
+            console.log('[Auth] User signed out')
+            break
+          case 'SIGNED_IN':
+            console.log('[Auth] User signed in')
+            break
+          case 'USER_UPDATED':
+            console.log('[Auth] User profile updated')
+            break
+        }
       })
 
       return () => subscription.unsubscribe()

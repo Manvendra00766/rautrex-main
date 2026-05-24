@@ -1,52 +1,41 @@
-"use client";
-
 import React from 'react';
-import { AlertTriangle, Database } from 'lucide-react';
-import { Button } from './button';
+import { Button } from './button'; // Assuming shadcn ui button exists
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 interface ErrorStateProps {
-  type?: 'error' | 'empty';
-  onRetry?: () => void;
-  message?: string;
+    title?: string;
+    message?: string;
+    onRetry?: () => void;
+    icon?: React.ReactNode;
 }
 
-export const ErrorState: React.FC<ErrorStateProps> = ({ 
-  type = 'error', 
-  onRetry, 
-  message 
-}) => {
-  return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-[#0d0d14] rounded-2xl p-8 text-center space-y-4">
-      {type === 'error' ? (
-        <>
-          <div className="p-4 rounded-full bg-red-500/10 text-red-500">
-            <AlertTriangle size={32} />
-          </div>
-          <div className="space-y-2">
-            <h3 className="text-lg font-semibold text-white">Unable to load data</h3>
-            <p className="text-sm text-gray-400 max-w-xs mx-auto">
-              {message || "We encountered an issue while fetching the requested analysis."}
-            </p>
-          </div>
-          {onRetry && (
-            <Button onClick={onRetry} variant="outline" className="mt-2 border-white/10 hover:bg-white/5">
-              Retry Connection
-            </Button>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="p-4 rounded-full bg-blue-500/10 text-blue-400">
-            <Database size={32} />
-          </div>
-          <div className="space-y-2">
-            <h3 className="text-lg font-semibold text-white">No data available</h3>
-            <p className="text-sm text-gray-400 max-w-xs mx-auto">
-              {message || "No data available for this period or ticker combination."}
-            </p>
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
+export function ErrorState({ 
+    title = 'Something went wrong', 
+    message = 'We encountered an error loading this data. Please try again.', 
+    onRetry,
+    icon = <AlertCircle className="w-10 h-10 text-red-500" />
+}: ErrorStateProps) {
+    return (
+        <div className="flex flex-col items-center justify-center p-8 space-y-4 text-center border rounded-xl bg-slate-50/50 dark:bg-slate-900/50">
+            <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-full">
+                {icon}
+            </div>
+            <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
+                    {message}
+                </p>
+            </div>
+            {onRetry && (
+                <Button 
+                    onClick={onRetry} 
+                    variant="outline" 
+                    className="mt-4 flex items-center space-x-2"
+                >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Try Again</span>
+                </Button>
+            )}
+        </div>
+    );
+}

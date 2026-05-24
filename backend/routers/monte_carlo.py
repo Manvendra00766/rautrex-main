@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from services.monte_carlo_service import run_monte_carlo_simulation
 from services.validation_service import validate_financial_metrics
-from dependencies import get_current_user
+from auth import get_current_user
 
 router = APIRouter()
 

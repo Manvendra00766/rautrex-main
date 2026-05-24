@@ -82,5 +82,14 @@ async def create_alert(user_id: str, ticker: str, condition: str, target_price: 
 async def get_alerts(user_id: str):
     return supabase.table("price_alerts").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
 
+from fastapi import HTTPException
+
 async def delete_alert(user_id: str, alert_id: str):
+    # Ownership check
+    check = supabase.table("price_alerts").select("user_id").eq("id", alert_id).single().execute()
+    if not check.data:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    if check.data["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this alert")
+    
     return supabase.table("price_alerts").delete().eq("id", alert_id).eq("user_id", user_id).execute()

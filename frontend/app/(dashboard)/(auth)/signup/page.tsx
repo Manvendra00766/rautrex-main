@@ -101,16 +101,16 @@ export default function SignupPage() {
   if (success) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="w-full max-w-md p-8 glass-panel rounded-2xl text-center space-y-4">
-          <div className="mx-auto w-12 h-12 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center">
+        <div className="w-full max-w-md p-8 glass-panel rounded-2xl text-center space-y-4 bg-surface">
+          <div className="mx-auto w-12 h-12 bg-positive/20 text-positive rounded-full flex items-center justify-center">
             <Check size={24} />
           </div>
-          <h1 className="text-2xl font-bold text-white">Check your email</h1>
-          <p className="text-muted-foreground">
-            We&apos;ve sent a verification link to <span className="text-white font-medium">{email}</span>. 
+          <h1 className="text-2xl font-bold text-foreground">Check your email</h1>
+          <p className="text-text-muted">
+            We&apos;ve sent a verification link to <span className="text-foreground font-bold">{email}</span>. 
             Please check your inbox to activate your account.
           </p>
-          <Button asChild className="w-full mt-4 bg-accent hover:bg-accent/90 text-black font-semibold">
+          <Button asChild className="w-full mt-4 bg-accent hover:bg-accent/90 text-foreground font-bold">
             <Link href="/login">Return to Login</Link>
           </Button>
         </div>
@@ -120,32 +120,32 @@ export default function SignupPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6">
+      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6 bg-surface">
         <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-white">Create Account</h1>
-          <p className="text-muted-foreground">Join the next generation of quant trading</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Create Account</h1>
+          <p className="text-text-muted">Join the next generation of quant trading</p>
         </div>
 
         {error && (
-          <div className="p-3 text-sm font-medium text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 text-sm font-medium text-negative bg-negative/10 border border-negative/20 rounded-lg">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSignup} className="space-y-4" role="form">
           <div className="space-y-2">
-            <Label htmlFor="fullName">Full Name</Label>
+            <Label htmlFor="fullName" className="text-foreground">Full Name</Label>
             <Input
               id="fullName"
               placeholder="John Doe"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
-              className="bg-white/5 border-white/10"
+              className="bg-surface border-border text-foreground"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-foreground">Email</Label>
             <Input
               id="email"
               type="email"
@@ -153,11 +153,11 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-white/5 border-white/10"
+              className="bg-surface border-border text-foreground"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-foreground">Password</Label>
             <div className="relative">
               <Input
                 id="password"
@@ -165,12 +165,12 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-white/5 border-white/10 pr-10"
+                className="bg-surface border-border text-foreground pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-foreground"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -178,7 +178,7 @@ export default function SignupPage() {
             
             {password.length > 0 && (
               <div className="space-y-2 mt-2">
-                <Progress value={strength} className="h-1 bg-white/5" />
+                <Progress value={strength} className="h-1 bg-border" />
                 <div className="grid grid-cols-2 gap-2 text-[10px]">
                   <Requirement met={checks.length} text="8+ characters" />
                   <Requirement met={checks.upper} text="Uppercase letter" />
@@ -190,14 +190,14 @@ export default function SignupPage() {
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Label htmlFor="confirmPassword" className="text-foreground">Confirm Password</Label>
             <Input
               id="confirmPassword"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="bg-white/5 border-white/10"
+              className="bg-surface border-border text-foreground"
             />
           </div>
 
@@ -207,9 +207,9 @@ export default function SignupPage() {
               type="checkbox"
               checked={acceptTerms}
               onChange={(e) => setAcceptTerms(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-white/10 bg-white/5 text-accent focus:ring-accent"
+              className="mt-1 h-4 w-4 rounded border-border bg-surface text-accent focus:ring-accent"
             />
-            <Label htmlFor="terms" className="text-xs leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+            <Label htmlFor="terms" className="text-xs leading-none text-text-muted font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
               I agree to the{' '}
               <Link href="/terms" className="text-accent hover:underline">
                 Terms of Service
@@ -221,14 +221,14 @@ export default function SignupPage() {
             </Label>
           </div>
 
-          <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-black font-semibold" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-foreground font-bold" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Account'}
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-center text-sm text-text-muted">
           Already have an account?{' '}
-          <Link href="/login" className="text-accent hover:underline">
+          <Link href="/login" className="text-accent hover:underline font-bold">
             Login
           </Link>
         </p>
@@ -239,9 +239,9 @@ export default function SignupPage() {
 
 function Requirement({ met, text }: { met: boolean; text: string }) {
   return (
-    <div className={`flex items-center gap-1.5 ${met ? 'text-green-500' : 'text-muted-foreground'}`}>
+    <div className={`flex items-center gap-1.5 ${met ? 'text-positive' : 'text-text-muted'}`}>
       {met ? <Check size={10} /> : <X size={10} />}
-      <span>{text}</span>
+      <span className="font-medium">{text}</span>
     </div>
   )
 }

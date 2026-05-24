@@ -4,7 +4,8 @@ from supabase_client import supabase
 from services import db_service
 from services.portfolio_engine import create_transaction, get_portfolio_overview
 from pydantic import BaseModel, Field, validator
-from dependencies import get_current_user
+from auth import get_current_user
+from core.logger import logger
 from typing import Optional, List
 from utils import safe_json
 
@@ -108,6 +109,7 @@ async def add_portfolio_position(
             gross_amount=pos.quantity * pos.avg_cost,
             fees=0.0,
             metadata={"asset_type": pos.asset_type, "source": "position_add"},
+            skip_cash_check=True,
         )
         overview = await get_portfolio_overview(current_user.id, portfolio_id)
         
@@ -122,6 +124,7 @@ async def add_portfolio_position(
     except HTTPException:
         raise
     except ValueError as e:
+        logger.error(f"Validation error in add_portfolio_position: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback

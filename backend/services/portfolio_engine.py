@@ -11,6 +11,7 @@ import pandas as pd
 from services.analytics_engine import build_warnings, compute_equity_metrics, safe_div, safe_float, summarize_allocation
 from services.pricing_engine import PriceSnapshot, get_batch_price_snapshots, get_price_history, normalize_symbol
 from services.risk_engine import compute_beta_vs_benchmark, compute_concentration_metrics, compute_exposure_metrics
+from services.portfolio_calculation_service import PortfolioCalculationService
 from supabase_client import supabase
 
 
@@ -78,14 +79,39 @@ def _coerce_transaction(tx: Dict[str, Any]) -> Dict[str, Any]:
     return tx
 
 
-def _synthesize_transactions(user_id: str, portfolio_id: str, position_rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _synthesize_transactions(
+    user_id: str,
+    portfolio_id: str,
+    position_rows: Iterable[Dict[str, Any]],
+    portfolio_created_at: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
     synthetic: List[Dict[str, Any]] = []
+    
+    # Calculate target synthetic execution time:
+    # If portfolio_created_at is provided, use it.
+    # Otherwise, default to 30 days ago.
+    if portfolio_created_at:
+        target_date = portfolio_created_at
+    else:
+        target_date = _utcnow() - timedelta(days=30)
+    
+    target_date_str = target_date.isoformat()
+
     for row in position_rows:
         shares = safe_float(row.get("quantity") or row.get("shares"))
         avg_cost = safe_float(row.get("avg_cost") or row.get("avg_cost_price"))
         if shares <= 0:
             continue
-        added_at = row.get("added_at") or row.get("created_at") or _utcnow().isoformat()
+            
+        added_at = row.get("added_at") or row.get("created_at") or target_date_str
+        try:
+            added_at_dt = _parse_datetime(added_at)
+            # If the position has a creation date newer than our target date, backdate it to target_date
+            if added_at_dt > target_date:
+                added_at = target_date_str
+        except Exception:
+            added_at = target_date_str
+
         synthetic.append(
             {
                 "id": f"synthetic-{row.get('id')}",
@@ -144,7 +170,7 @@ async def get_portfolio_record(user_id: str, portfolio_id: Optional[str] = None)
     return portfolios[0]
 
 
-async def load_transactions_for_portfolio(user_id: str, portfolio_id: str) -> List[Dict[str, Any]]:
+async def load_transactions_for_portfolio(user_id: str, portfolio_id: str, portfolio_created_at: Optional[datetime] = None) -> List[Dict[str, Any]]:
     transactions: List[Dict[str, Any]] = []
     try:
         response = (
@@ -186,17 +212,19 @@ async def load_transactions_for_portfolio(user_id: str, portfolio_id: str) -> Li
             .execute()
         )
     position_rows = fallback.data or []
-    synthetic = _synthesize_transactions(user_id, portfolio_id, position_rows)
+    synthetic = _synthesize_transactions(user_id, portfolio_id, position_rows, portfolio_created_at)
     return [_coerce_transaction(tx) for tx in synthetic]
 
 
 def compute_portfolio_state(
     transactions: List[Dict[str, Any]],
     price_map: Dict[str, PriceSnapshot],
+    initial_cash: float = 0.0,
 ) -> Dict[str, Any]:
+    # FIXED: Calculate cash balance using initial_cash and trace all transactions, skipping initial_deposit to avoid double-counting
     open_lots: Dict[str, List[TaxLot]] = defaultdict(list)
     realized_pnl_by_symbol: Dict[str, float] = defaultdict(float)
-    cash_balance = 0.0
+    cash_balance = initial_cash
 
     for raw_tx in sorted(transactions, key=_transaction_sort_key):
         tx = _coerce_transaction(raw_tx)
@@ -208,6 +236,8 @@ def compute_portfolio_state(
         gross_amount = _transaction_amount(tx)
 
         if tx_type == "DEPOSIT":
+            if tx.get("metadata", {}).get("source") == "initial_deposit":
+                continue
             cash_balance += gross_amount
         elif tx_type == "WITHDRAWAL":
             cash_balance -= gross_amount
@@ -296,10 +326,9 @@ def compute_portfolio_state(
             "change_percent": safe_div(live_price - prev_close, prev_close) * 100 if prev_close else 0.0,
         })
 
-    total_nav = cash_balance + total_market_value
-    
-    for pos in positions:
-        pos["weight_pct"] = safe_div(pos["market_value"], total_market_value) * 100 if total_market_value else 0.0
+    total_nav = PortfolioCalculationService.calculate_nav(cash_balance, positions)
+    positions = PortfolioCalculationService.calculate_weights(positions)
+    total_daily_pnl = PortfolioCalculationService.calculate_daily_pnl(positions)
 
     positions.sort(key=lambda x: x["market_value"], reverse=True)
 
@@ -317,18 +346,47 @@ def build_equity_curve(
     transactions: List[Dict[str, Any]],
     price_history: Dict[str, pd.Series],
     end_date: date,
+    initial_cash: float = 0.0,
+    portfolio_created_at: Optional[date] = None,
 ) -> List[Dict[str, Any]]:
+    # FIXED: Build equity curve with baseline if portfolio was created today to guarantee 2-point flat line
     if not transactions:
-        return []
+        start = (portfolio_created_at or end_date) - timedelta(days=1)
+        return [
+            {
+                "snapshot_date": start.isoformat(),
+                "nav": initial_cash,
+                "cash_balance": initial_cash,
+                "market_value": 0.0,
+                "daily_pnl": 0.0,
+                "net_cash_flow": initial_cash,
+            },
+            {
+                "snapshot_date": end_date.isoformat(),
+                "nav": initial_cash,
+                "cash_balance": initial_cash,
+                "market_value": 0.0,
+                "daily_pnl": 0.0,
+                "net_cash_flow": 0.0,
+            }
+        ]
 
     normalized_transactions = [_coerce_transaction(tx) for tx in transactions]
     start_date = min(tx["executed_at"].date() for tx in normalized_transactions)
+    if portfolio_created_at:
+        start_date = min(start_date, portfolio_created_at)
+        
+    if start_date == end_date:
+        start_date = start_date - timedelta(days=1)
+
     all_dates = pd.date_range(start=start_date, end=end_date, freq="D")
-    cash_balance = 0.0
+    cash_balance = initial_cash
     shares_by_symbol: Dict[str, float] = defaultdict(float)
     tx_by_day: Dict[date, List[Dict[str, Any]]] = defaultdict(list)
 
     for tx in normalized_transactions:
+        if tx.get("metadata", {}).get("source") == "initial_deposit":
+            continue
         tx_by_day[tx["executed_at"].date()].append(tx)
 
     price_frames: Dict[str, pd.Series] = {}
@@ -514,19 +572,98 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         }
 
     portfolio_id = str(portfolio["id"])
-    transactions = await load_transactions_for_portfolio(user_id, portfolio_id)
+    
+    portfolio_created_dt = None
+    if portfolio.get("created_at"):
+        try:
+            portfolio_created_dt = _parse_datetime(portfolio["created_at"])
+        except Exception:
+            pass
+
+    transactions = await load_transactions_for_portfolio(user_id, portfolio_id, portfolio_created_dt)
     symbols = [tx["symbol"] for tx in transactions if tx.get("symbol")]
     price_map = await get_batch_price_snapshots(symbols) if symbols else {}
-    state = compute_portfolio_state(transactions, price_map)
+    initial_cash = safe_float(portfolio.get("initial_cash", 0.0))
+    state = compute_portfolio_state(transactions, price_map, initial_cash)
 
     history_end = _utcnow().date()
     history_start = min((tx["executed_at"].date() for tx in transactions), default=history_end)
     price_history = await get_price_history(symbols, history_start, history_end) if symbols else {}
-    equity_curve = build_equity_curve(transactions, price_history, history_end)
+    
+    # Enrich positions with risk metrics
+    import numpy as np
+    for pos in state["positions"]:
+        symbol = pos["ticker"]
+        quote = price_map.get(symbol)
+        
+        # 1. market_cap
+        mcap = quote.market_cap if (quote and quote.market_cap is not None) else None
+        pos["market_cap"] = mcap
+        
+        # 2. beta
+        beta = 1.0
+        if quote and quote.raw and quote.raw.get("beta") is not None:
+            try:
+                beta = float(quote.raw["beta"])
+            except Exception:
+                pass
+        pos["beta"] = beta
+        
+        # 3. volatility
+        pos_sigma = None
+        series = price_history.get(symbol)
+        if series is not None and not series.empty:
+            try:
+                if isinstance(series.index, pd.MultiIndex):
+                    if 'Date' in series.index.names:
+                        series = series.xs(symbol, level=1) if symbol in series.index.get_level_values(1) else series
+                
+                # Use clean normalizer to match equity curve calculation
+                from utils import normalize_history
+                raw_history = list(zip(series.index, series.values))
+                clean_list = normalize_history(raw_history)
+                if clean_list:
+                    clean_df = pd.DataFrame(clean_list)
+                    clean_series = clean_df.set_index(pd.to_datetime(clean_df['date']))['nav']
+                    pos_series = clean_series.dropna().pct_change().dropna()
+                    if len(pos_series) >= 2:
+                        pos_sigma = float(pos_series.std())
+            except Exception:
+                pass
+        if pos_sigma is None or not np.isfinite(pos_sigma) or pos_sigma <= 0:
+            pos_sigma = 0.02 # 2% daily volatility fallback
+        
+        vol = pos_sigma * np.sqrt(252) * 100
+        pos["volatility"] = vol
+        
+        # 4. var_95
+        pos["var_95"] = 1.645 * pos_sigma * pos["market_value"]
+        
+        # 5. risk_contribution
+        weight_pct = pos.get("weight_pct", 0.0)
+        pos["risk_contribution"] = (weight_pct / 100.0) * beta
+
+    portfolio_created_at = None
+    if portfolio_created_dt:
+        portfolio_created_at = portfolio_created_dt.date()
+        
+    equity_curve = build_equity_curve(
+        transactions, 
+        price_history, 
+        history_end, 
+        initial_cash=initial_cash,
+        portfolio_created_at=portfolio_created_at
+    )
     await persist_historical_equity(user_id, portfolio_id, equity_curve)
     await sync_portfolio_positions_snapshot(portfolio_id, state["positions"])
 
-    summary_metrics = compute_equity_metrics(equity_curve)
+    summary_metrics = compute_equity_metrics(
+        equity_curve,
+        initial_cash,
+        positions=state["positions"],
+        price_history=price_history,
+        portfolio_value=state["total_nav"],
+    )
     
     beta_err = None
     try:
@@ -571,7 +708,102 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
     if beta_err:
         warnings.append(beta_err)
 
-    return {
+    # FIXED: Return flat API contract root fields alongside legacy nested keys for Phase 3 compliance
+    
+    # Calculate detailed system alerts (Bug 7)
+    alerts = []
+    # Concentration risk (> 70% weight)
+    for pos in state["positions"]:
+        weight = pos.get("weight_pct", 0.0)
+        if weight > 70.0:
+            alerts.append({
+                "id": f"conc_{pos['ticker']}",
+                "type": "risk_breach",
+                "severity": "warning",
+                "title": f"Concentration Risk — {pos['ticker']}",
+                "message": f"{pos['ticker']} represents {weight:.1f}% of portfolio. Recommended max: 70%.",
+                "affected_asset": pos["ticker"],
+                "triggered_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "threshold": 70.0,
+                "current_value": weight
+            })
+    # Negative cash balance warning
+    if state["cash_balance"] < 0.0:
+        alerts.append({
+            "id": "neg_cash",
+            "type": "risk_breach",
+            "severity": "critical",
+            "title": "Negative Cash Balance",
+            "message": f"Portfolio cash balance is ${state['cash_balance']:,.2f}. Check transaction records.",
+            "affected_asset": None,
+            "triggered_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "threshold": 0.0,
+            "current_value": state["cash_balance"]
+        })
+
+    # Prepare sector allocation list of dicts for Phase 3 API Contract
+    SECTOR_COLORS = {
+        "Information Technology": "#3B82F6",
+        "Consumer Discretionary": "#F59E0B",
+        "Financials": "#10B981",
+        "Healthcare": "#EF4444",
+        "Energy": "#8B5CF6",
+        "Industrials": "#6B7280",
+        "Communication Services": "#EC4899",
+        "Consumer Staples": "#14B8A6",
+        "Materials": "#F97316",
+        "Real Estate": "#84CC16",
+        "Utilities": "#06B6D4",
+        "Other": "#9CA3AF",
+    }
+    
+    sector_allocation = []
+    for item in allocation.get("by_sector", []):
+        sector_name = item.get("label", "Other")
+        sector_allocation.append({
+            "sector": sector_name,
+            "value": round(item.get("value", 0.0), 2),
+            "weight": round(item.get("weight_pct", 0.0), 2),
+            "color": SECTOR_COLORS.get(sector_name, SECTOR_COLORS["Other"])
+        })
+
+    # Prepare flat list of nav_history
+    nav_history = []
+    for row in equity_curve:
+        nav_history.append({
+            "date": row["snapshot_date"],
+            "nav": round(row["nav"], 2)
+        })
+
+    last_updated_time = max((snapshot.fetched_at.isoformat().replace("+00:00", "Z") for snapshot in price_map.values()), default=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
+
+    # Construct the final nested + flat dictionary
+    res_dict = {
+        # Flat fields (Phase 3 API Contract)
+        "portfolio_id": portfolio_id,
+        "name": portfolio["name"],
+        "initial_cash": initial_cash,
+        "cash_balance": round(state["cash_balance"], 2),
+        "market_value": round(state["total_market_value"], 2),
+        "nav": round(state["total_nav"], 2),
+        "gross_exposure": round(exposure["gross_exposure"], 2),
+        "unrealized_pnl": round(sum(pos["unrealized_pnl"] for pos in state["positions"]), 2),
+        "realized_pnl": round(state["total_realized_pnl"], 2),
+        "daily_pnl": round(state["total_daily_pnl"], 2),
+        "daily_pnl_pct": round(summary_metrics["daily_return_pct"], 2) if summary_metrics["daily_return_pct"] is not None else 0.0,
+        "performance_this_month_pct": round(summary_metrics["mtd_return_pct"], 2) if summary_metrics["mtd_return_pct"] is not None else 0.0,
+        "performance_ytd_pct": round(summary_metrics["ytd_return_pct"], 2) if summary_metrics["ytd_return_pct"] is not None else 0.0,
+        "max_drawdown_pct": round(summary_metrics["max_drawdown"], 2) if summary_metrics["max_drawdown"] is not None else 0.0,
+        "sharpe_ratio": round(summary_metrics["sharpe_ratio"], 2) if summary_metrics["sharpe_ratio"] is not None else 0.0,
+        "max_daily_loss_95var": round((summary_metrics["var_95"] or 0.0) * state["total_nav"], 2) if summary_metrics["var_95"] is not None else 0.0,
+        "holdings_count": len(state["positions"]),
+        "positions": state["positions"],
+        "sector_allocation": sector_allocation,
+        "nav_history": nav_history,
+        "alerts": alerts,
+        "last_updated": last_updated_time,
+
+        # Legacy nested fields (for backwards-compatibility)
         "portfolio": {
             "id": portfolio["id"],
             "name": portfolio["name"],
@@ -582,13 +814,26 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
             "margin_enabled": portfolio.get("margin_enabled", False),
         },
         "summary": summary,
-        "positions": state["positions"],
         "equity_curve": equity_curve,
         "allocation": allocation,
         "warnings": warnings,
         "transactions_count": len(transactions),
         "last_priced_at": max((snapshot.fetched_at.isoformat() for snapshot in price_map.values()), default=None),
     }
+
+    # Serialize transactions to prevent datetime JSON errors
+    serialized_transactions = []
+    for tx in transactions:
+        tx_copy = dict(tx)
+        if isinstance(tx_copy.get("executed_at"), datetime):
+            tx_copy["executed_at"] = tx_copy["executed_at"].isoformat()
+        if isinstance(tx_copy.get("created_at"), datetime):
+            tx_copy["created_at"] = tx_copy["created_at"].isoformat()
+        serialized_transactions.append(tx_copy)
+
+    res_dict["transactions"] = serialized_transactions
+
+    return res_dict
 
 
 async def create_transaction(
@@ -605,11 +850,13 @@ async def create_transaction(
     lot_method: str = "FIFO",
     metadata: Optional[Dict[str, Any]] = None,
     external_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    skip_cash_check: bool = False,
+    ) -> Dict[str, Any]:
     transaction_type = transaction_type.upper()
-    
+
     # Pre-validation for margin mode
-    if transaction_type == "BUY" and quantity and price:
+    if transaction_type == "BUY" and quantity and price and not skip_cash_check:
+
         portfolio = await get_portfolio_record(user_id, portfolio_id)
         margin_enabled = portfolio.get("margin_enabled", False) if portfolio else False
         
@@ -617,7 +864,8 @@ async def create_transaction(
             # We need current cash balance. Load all transactions and compute state.
             txs = await load_transactions_for_portfolio(user_id, portfolio_id)
             # Use a dummy price map as we only care about cash
-            current_state = compute_portfolio_state(txs, {})
+            initial_cash = safe_float(portfolio.get("initial_cash", 0.0)) if portfolio else 0.0
+            current_state = compute_portfolio_state(txs, {}, initial_cash)
             current_cash = current_state["cash_balance"]
             
             total_cost = (quantity * price) + fees
@@ -702,4 +950,3 @@ async def create_transaction(
     except Exception as e:
         print(f"Position sync failed during transaction: {e}")
         return payload
-

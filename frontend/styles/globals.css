@@ -1,0 +1,101 @@
+ @frontend\tailwind.config.ts base;
+ @frontend\tailwind.config.ts components;
+ @frontend\tailwind.config.ts utilities;
+ @layer base {
+  :root {
+    --bg-base: #F5F0E8;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #EDE8DC;
+    --border: #D4CEC4;
+    --border-strong: #8C8278;
+    --text-primary: #1A1714;
+    --text-secondary: #8C8278;
+    --text-muted: #8C8278;
+    --accent-primary: #8B6F47;
+    --accent-emerald: #166534;
+    --accent-purple: #6D28D9;
+    --accent-amber: #92400E;
+    --positive: #166534;
+    --negative: #991B1B;
+    --sidebar-bg: #EDE8DC;
+    --toggle-bg: #EDE8DC;
+    --toggle-border: #D4CEC4;
+    --glow-primary: 0 0 20px rgba(139,111,71,0.12);
+  }
+  .dark {
+    /* Set dark mode parameters identically to avoid flashing transitions */
+    --bg-base: #F5F0E8;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #EDE8DC;
+    --border: #D4CEC4;
+    --border-strong: #8C8278;
+    --text-primary: #1A1714;
+    --text-secondary: #8C8278;
+    --text-muted: #8C8278;
+    --accent-primary: #8B6F47;
+    --accent-emerald: #166534;
+    --accent-purple: #6D28D9;
+    --accent-amber: #92400E;
+    --positive: #166534;
+    --negative: #991B1B;
+    --sidebar-bg: #EDE8DC;
+    --toggle-bg: #EDE8DC;
+    --toggle-border: #D4CEC4;
+    --glow-primary: 0 0 20px rgba(139,111,71,0.12);
+  }
+  * {
+    @apply border-[var(--border)];
+    transition: background-color 200ms ease, 
+                color 200ms ease, 
+                border-color 200ms ease;
+  }
+  body {
+    @apply bg-[var(--bg-base)] text-[var(--text-primary)] antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+  .font-mono, .tabular-nums {
+    font-family: var(--font-geist-mono), var(--font-jetbrains), monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+ @layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: var(--bg-base);
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 2px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+  .border-glow {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 12px rgba(139,111,71,0.15);
+  }
+  .card-institutional {
+    @apply bg-[var(--bg-surface)] border border-[var(--border)] 
+           rounded-lg p-4;
+  }
+  .label-institutional {
+    @apply text-[10px] font-bold uppercase tracking-[0.15em] 
+           text-[var(--text-muted)];
+  }
+  .value-mono {
+    @apply font-mono font-bold tracking-tighter 
+           text-[var(--text-primary)] tabular-nums;
+  }
+  .positive {
+    @apply text-[var(--positive)];
+  }
+  .negative {
+    @apply text-[var(--negative)];
+  }
+}

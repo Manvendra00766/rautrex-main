@@ -9,7 +9,7 @@ from services.risk_service import (
     run_scenarios
 )
 from services.validation_service import validate_financial_metrics
-from dependencies import get_current_user
+from auth import get_current_user
 
 import traceback
 

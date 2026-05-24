@@ -4,64 +4,94 @@
 
 @layer base {
   :root {
-    --background: 240 20% 5%;
-    --foreground: 0 0% 100%;
+    /* Institutional Theme - Redesigned Warm Beige Specs */
+    --bg-primary: #F5F0E8;
+    --bg-secondary: #EDE8DC;
+    --bg-surface: #FFFFFF;
+    --bg-card: #EDE8DC;
     
-    --card: 240 17% 8%;
-    --card-foreground: 0 0% 100%;
+    --border: #D4CEC4;
+    --border-strong: #8C8278;
     
-    --popover: 240 17% 8%;
-    --popover-foreground: 0 0% 100%;
+    --text-primary: #1A1714;
+    --text-secondary: #8C8278;
+    --text-muted: #8C8278;
     
-    --primary: 190 100% 50%;
-    --primary-foreground: 0 0% 0%;
+    --accent: #8B6F47;
+    --positive: #166534;
+    --negative: #991B1B;
     
-    --secondary: 262 83% 58%;
-    --secondary-foreground: 0 0% 100%;
+    --primary: var(--accent);
+    --primary-foreground: #FFFFFF;
+    --muted: var(--bg-secondary);
+    --muted-foreground: var(--text-muted);
+    --input: var(--border);
+    --ring: var(--accent);
     
-    --muted: 240 10% 15%;
-    --muted-foreground: 240 5% 65%;
-    
-    --accent: 190 100% 50%;
-    --accent-foreground: 0 0% 0%;
-    
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 240 10% 15%;
-    --input: 240 10% 15%;
-    --ring: 190 100% 50%;
-    
-    --radius: 0.5rem;
+    --font-inter: "Inter", sans-serif;
+    --font-mono: "Geist Mono", monospace;
   }
 
-  html {
-    /* Responsive font size: scales down 10% on mobile */
-    font-size: clamp(0.9rem, 1vw + 0.5rem, 1rem);
+  /* Force dark class to use the same institutional theme to prevent flashing */
+  .dark {
+    --bg-primary: #F5F0E8;
+    --bg-secondary: #EDE8DC;
+    --bg-surface: #FFFFFF;
+    --bg-card: #EDE8DC;
+    
+    --border: #D4CEC4;
+    --border-strong: #8C8278;
+    
+    --text-primary: #1A1714;
+    --text-secondary: #8C8278;
+    --text-muted: #8C8278;
+    
+    --accent: #8B6F47;
+    --positive: #166534;
+    --negative: #991B1B;
+
+    --primary: var(--accent);
+    --primary-foreground: #FFFFFF;
+    --muted: var(--bg-secondary);
+    --muted-foreground: var(--text-muted);
+    --input: var(--border);
+    --ring: var(--accent);
   }
 
   * {
-    @apply border-border;
+    @apply border-[var(--border)];
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-[var(--bg-primary)] text-[var(--text-primary)] antialiased font-sans;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight text-[var(--text-primary)];
+  }
+}
+
+@layer components {
+  /* Legacy classes - keeping for safe transition, but new components will be used */
+  .glass-panel {
+    @apply bg-[var(--bg-surface)] border border-[var(--border)] shadow-sm;
+  }
+
+  .card-institutional {
+    @apply bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-4;
+  }
+
+  .label-institutional {
+    @apply text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--text-muted)];
+  }
+
+  .value-mono {
+    @apply font-mono font-bold tracking-tighter text-[var(--text-primary)] tabular-nums;
   }
 }
 
 @layer utilities {
-  .glass-panel {
-    @apply bg-surface/70 backdrop-blur-md border border-white/5;
-  }
-
-  .cyan-glow {
-    box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
-  }
-
-  .mobile-card {
-    @apply p-4 rounded-xl border border-white/5 bg-surface/50 mb-3;
-  }
-
-  /* Custom scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -70,31 +100,13 @@
     @apply bg-transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+    @apply bg-[var(--border-strong)] rounded-sm hover:bg-[var(--text-muted)] transition-colors;
   }
-}
 
-/* Recharts fix */
-.recharts-responsive-container {
-  min-height: 100px;
-  min-width: 0;
-}
-
-/* Animations */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes cyan-pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
-}
-
-.animate-cyan-pulse {
-  animation: cyan-pulse 4s ease-in-out infinite;
+  .positive {
+    @apply text-[var(--positive)];
+  }
+  .negative {
+    @apply text-[var(--negative)];
+  }
 }

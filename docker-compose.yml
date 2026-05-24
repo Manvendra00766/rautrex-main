@@ -1,32 +1,105 @@
-version: '3.8'
+name: rautrex
 
 services:
+  # --- BACKEND (FastAPI) ---
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: rautrex-backend
+    restart: always
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./backend:/app:rw
+      - backend-data:/data
+    env_file:
+      - ./backend/.env
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - WATCHPACK_POLLING=true # Helps with hot-reload on some Windows setups
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    networks:
+      - rautrex-network
 
+  # --- FRONTEND (Next.js) ---
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: rautrex-frontend
+    restart: always
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
+      - ./frontend:/app:rw
       - /app/node_modules
+      - /app/.next
+    env_file:
+      - ./frontend/.env
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - CHOKIDAR_USEPOLLING=true # Essential for hot-reload on WSL2/Windows volumes
+    depends_on:
+      - backend
+    networks:
+      - rautrex-network
 
+  # --- INFRASTRUCTURE (Redis) ---
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
+    container_name: rautrex-redis
+    restart: always
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes # Ensure persistence
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - rautrex-network
+
+  # --- OBSERVABILITY (Prometheus & Grafana) ---
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: rautrex-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - rautrex-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: rautrex-grafana
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - rautrex-network
+
+networks:
+  rautrex-network:
+    driver: bridge
+
+volumes:
+  backend-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:

@@ -8,21 +8,17 @@ import {
   ArrowRight,
   DollarSign,
   LayoutDashboard,
-  Percent,
   ShieldAlert,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-  ChevronDown,
-  ChevronUp
+  Download,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react"
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -32,69 +28,140 @@ import {
 } from "recharts"
 import { motion, AnimatePresence } from "framer-motion"
 
-import MetricCard from "@/components/metric-card"
+import { MetricCard } from "@/components/ui/MetricCard"
+import { CardSurface } from "@/components/ui/CardSurface"
+import { DataTable, TableHead, TableRow, TableCell } from "@/components/ui/DataTable"
+import { SectionHeader } from "@/components/ui/SectionHeader"
 import TickerTape from "@/components/ticker-tape"
 import { Button } from "@/components/ui/button"
 import { usePortfolioOverview } from "@/lib/use-portfolio-overview"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/components/ui/Toast"
+import api from "@/lib/api"
+import ChartWrapper from "@/components/ChartWrapper"
+import { useSandbox } from "@/lib/sandboxContext"
+import { sandboxData } from "@/lib/sandboxData"
 
+const PIE_COLORS = ['#8B6F47', '#EDE8DC', '#8C8278', '#D4CEC4', '#2F6B3D', '#FAF7F2', '#EFE8DF']
 
-const PIE_COLORS = ["#00d4ff", "#10b981", "#f59e0b", "#7c3aed", "#f43f5e", "#6366f1"]
-
-function formatCurrency(value: number) {
+function formatCurrency(value: number | null | undefined) {
+  if (value === null || value === undefined) return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
-  }).format(value || 0)
+  }).format(value)
 }
 
-function formatPct(value: number, digits = 2) {
-  const normalized = value || 0
-  return `${normalized >= 0 ? "+" : ""}${normalized.toFixed(digits)}%`
+function formatPct(value: number | null | undefined, digits = 2) {
+  if (value === null || value === undefined) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`
 }
 
 export default function Dashboard() {
-  const { overview, loading, error } = usePortfolioOverview()
+  const { isSandbox, enterSandbox } = useSandbox()
+  const { overview: realOverview, loading: realLoading, error: realError } = usePortfolioOverview()
+
+  const overview = isSandbox ? (sandboxData as any) : realOverview
+  const loading = isSandbox ? false : realLoading
+  const error = isSandbox ? null : realError
+
   const [alertsExpanded, setAlertsExpanded] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const { toast } = useToast()
+
+  const handleExportPDF = async () => {
+    if (isSandbox) {
+      toast({
+        type: 'success',
+        title: 'Sandbox Export Successful',
+        description: 'Simulated PDF generation completed. Real PDF exports require an active workspace.'
+      });
+      return;
+    }
+    if (!overview?.portfolio?.id) return;
+    
+    setIsExporting(true);
+    try {
+      const portfolioId = overview.portfolio.id;
+      const response = await api.get(`/report/export/${portfolioId}`, {
+        responseType: 'blob'
+      });
+
+      const blob = response.data;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `rautrex_report_${portfolioId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(url), 5000);
+      
+      toast({
+        type: 'success',
+        title: 'Report Downloaded',
+        description: 'Your portfolio report has been generated successfully.'
+      });
+    } catch (err) {
+      console.error('PDF Export failed:', err);
+      toast({
+        type: 'error',
+        title: 'Export Failed',
+        description: 'Could not generate the PDF report. Please try again.'
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[500px]">
-        <Activity className="text-accent animate-spin" size={32} />
+        <Activity className="text-[var(--accent)] animate-spin" size={32} />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="glass-panel p-12 rounded-3xl flex flex-col items-center justify-center gap-4 min-h-[500px] bg-[#0d0d14]">
-        <AlertTriangle className="text-red-500" size={40} />
-        <p className="text-sm font-mono text-gray-400">{error}</p>
-      </div>
+      <CardSurface className="p-8 flex flex-col items-center justify-center gap-4 min-h-[500px]">
+        <AlertTriangle className="text-negative" size={40} />
+        <p className="text-sm font-mono text-text-secondary">{error}</p>
+      </CardSurface>
     )
   }
 
   if (!overview?.portfolio || !overview.summary) {
     return (
-      <div className="space-y-8 max-w-[1800px] mx-auto">
+      <div className="space-y-4 max-w-[1800px] mx-auto">
         <TickerTape />
-        <div className="glass-panel p-16 rounded-3xl flex flex-col items-center justify-center text-center space-y-8 min-h-[600px] bg-[#0d0d14] border border-white/[0.02]">
-          <div className="w-24 h-24 bg-accent/5 rounded-full flex items-center justify-center">
-            <LayoutDashboard className="text-accent" size={48} />
+        <CardSurface className="p-8 flex flex-col items-center justify-center text-center space-y-6 min-h-[400px]">
+          <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center">
+            <LayoutDashboard className="text-accent" size={32} />
           </div>
-          <div className="space-y-4">
-            <h2 className="text-3xl font-black text-white tracking-tight">No Active Portfolio</h2>
-            <p className="text-gray-500 max-w-md mx-auto text-sm leading-relaxed">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-text-primary">No Active Portfolio</h2>
+            <p className="text-text-muted max-w-md mx-auto text-sm leading-relaxed">
               Create or fund a portfolio to unlock live NAV, accounting, and risk analytics across the terminal.
             </p>
           </div>
-          <Link href="/portfolio">
-            <Button className="bg-accent hover:bg-accent/90 text-black font-black px-10 h-14 tracking-widest uppercase text-xs gap-3">
-              <DollarSign size={16} /> OPEN PORTFOLIO LAB
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <Link href="/dashboard/portfolio">
+              <Button className="bg-[#8B6F47] hover:bg-[#8B6F47]/90 text-white font-bold px-8 h-10 tracking-widest uppercase text-xs gap-2 rounded-sm border-none shadow-none">
+                <DollarSign size={14} /> OPEN PORTFOLIO LAB
+              </Button>
+            </Link>
+            <Button 
+              onClick={enterSandbox}
+              variant="outline"
+              className="border-[#D4CEC4] hover:bg-[#EDE8DC]/50 text-text-primary font-bold px-8 h-10 tracking-widest uppercase text-xs gap-2 rounded-sm shadow-none bg-surface"
+            >
+              <Activity size={14} className="text-[#8B6F47]" /> ENTER SANDBOX DEMO
             </Button>
-          </Link>
-        </div>
+          </div>
+        </CardSurface>
       </div>
     )
   }
@@ -102,49 +169,126 @@ export default function Dashboard() {
   const { summary, positions, equity_curve, allocation, warnings } = overview
   const bestPerformer = [...positions].sort((a, b) => b.total_return_pct - a.total_return_pct)[0]
   const worstPerformer = [...positions].sort((a, b) => a.total_return_pct - b.total_return_pct)[0]
-  const sectorAllocation = allocation.by_sector.slice(0, 6)
-  const assetAllocation = allocation.by_asset_type.slice(0, 6)
+  
+  const navValues = (equity_curve || []).map((d: any) => d.nav || 0)
+  const minNav = navValues.length > 0 ? Math.min(...navValues) : 0
+  const maxNav = navValues.length > 0 ? Math.max(...navValues) : 10000
+  const yDomain = [
+    minNav > 0 ? minNav * 0.95 : 0,
+    maxNav > 0 ? maxNav * 1.05 : 10000
+  ]
+  
+  const totalPositionsValue = positions.reduce((sum, pos) => sum + pos.market_value, 0)
+  const cashValue = summary.nav - totalPositionsValue
+  const allocationData = (allocation?.by_sector || []).map((bucket, i) => ({
+    name: bucket.label,
+    value: bucket.weight_pct,
+    color: PIE_COLORS[i % PIE_COLORS.length]
+  }))
+  
+  if (cashValue > 0) {
+    allocationData.push({
+      name: 'Cash',
+      value: (cashValue / summary.nav) * 100,
+      color: 'var(--text-muted)'
+    })
+  }
+  const firstAlertMessage = (overview as any).alerts?.[0]?.message || warnings?.[0]?.message
+  const exposureIsEqual = Math.abs((summary.gross_exposure || 0) - (summary.net_exposure || 0)) < 0.01
+  const exposureEqualNote = exposureIsEqual ? "Equal because no short positions held" : undefined
 
   return (
-    <div className="space-y-8 max-w-[1800px] mx-auto pb-16">
+    <div className="space-y-4 max-w-[1800px] mx-auto pb-8">
       {/* Header & Ticker Tape */}
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
-          <div>
-            <p className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-1">Portfolio Command Center</p>
-            <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">{overview.portfolio.name}</h1>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-end gap-4">
+            <SectionHeader 
+              title={overview.portfolio.name} 
+              description="Portfolio Command Center" 
+              className="mb-0"
+            />
+            <Button 
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              variant="outline"
+              className="bg-surface border-border hover:bg-card text-text-primary text-[10px] tracking-[0.1em] font-bold h-8 px-3 uppercase gap-2 mb-1 rounded-sm shadow-none"
+            >
+              {isExporting ? (
+                <Activity className="animate-spin text-accent" size={14} />
+              ) : (
+                <Download size={14} className="text-accent" />
+              )}
+              {isExporting ? "Generating..." : "Export PDF"}
+            </Button>
           </div>
-          <div className="xl:w-2/3">
+          <div className="xl:w-1/2">
             <TickerTape />
           </div>
         </div>
       </div>
 
-      {/* Alerts Bar (Collapsible, Slimmer) */}
-      {warnings.length > 0 && (
-        <div className="glass-panel rounded-2xl border border-amber-500/20 bg-amber-500/[0.02] overflow-hidden">
+      {/* Alerts Bar */}
+      {((overview as any).alerts?.length > 0 || warnings.length > 0) && (
+        <div className="bg-surface border-l-[3px] border-negative overflow-hidden rounded-sm">
           <button 
             onClick={() => setAlertsExpanded(!alertsExpanded)}
-            className="w-full flex items-center justify-between p-4 hover:bg-amber-500/[0.05] transition-colors"
+            className="w-full flex items-center justify-between p-2.5 hover:bg-card transition-colors border-b border-border"
           >
             <div className="flex items-center gap-3">
-              <AlertTriangle size={16} className="text-amber-500" />
-              <span className="text-xs uppercase tracking-widest font-bold text-amber-500">
-                {warnings.length} Active System {warnings.length === 1 ? 'Alert' : 'Alerts'}
+              <AlertTriangle size={14} className="text-negative animate-pulse" />
+              <span className="text-xs font-medium text-text-primary">
+                {((overview as any).alerts?.length || warnings.length)} Active System {((overview as any).alerts?.length || warnings.length) === 1 ? 'Alert' : 'Alerts'}
               </span>
+              {!alertsExpanded && firstAlertMessage && (
+                <span className="text-[11px] text-text-secondary truncate max-w-[60vw] text-left">
+                  {firstAlertMessage}
+                </span>
+              )}
             </div>
-            {alertsExpanded ? <ChevronUp size={16} className="text-amber-500/50" /> : <ChevronDown size={16} className="text-amber-500/50" />}
+            {alertsExpanded ? <ChevronUp size={14} className="text-text-muted" /> : <ChevronDown size={14} className="text-text-muted" />}
           </button>
           <AnimatePresence>
             {alertsExpanded && (
               <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
-                <div className="px-4 pb-4 flex flex-col gap-2">
-                  {warnings.map((warning) => (
-                    <div key={warning.code} className="text-[11px] font-mono text-amber-200/80 flex items-center gap-3 bg-black/20 p-2.5 rounded-lg border border-amber-500/10">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500/50" />
-                      {warning.message}
-                    </div>
-                  ))}
+                <div className="p-4 flex flex-col gap-3">
+                  {(overview as any).alerts && (overview as any).alerts.length > 0 ? (
+                    (overview as any).alerts.map((alert: any) => (
+                      <div key={alert.id} className="text-[11px] font-mono bg-surface border border-border rounded-sm p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div className="flex items-start gap-2.5">
+                          <div className={cn(
+                            "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-sans",
+                            alert.severity === "critical" 
+                              ? "bg-negative/10 text-negative border border-negative/20" 
+                              : "bg-warning/10 text-warning border border-warning/20"
+                          )}>
+                            {alert.severity}
+                          </div>
+                          <div>
+                            <p className="font-bold text-text-primary mb-0.5">{alert.title}</p>
+                            <p className="text-text-secondary">{alert.message}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 self-end md:self-center text-text-muted shrink-0 text-[10px]">
+                          {alert.affected_asset && (
+                            <span className="px-1.5 py-0.5 bg-surface border border-border rounded text-[9px] font-bold text-accent font-sans">
+                              {alert.affected_asset}
+                            </span>
+                          )}
+                          <span>
+                            {new Date(alert.triggered_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    warnings.map((warning) => (
+                      <div key={warning.code} className="text-[11px] font-mono text-text-secondary flex items-center gap-2 py-0.5">
+                        <span className="w-1 h-1 rounded-full bg-negative" />
+                        {warning.message}
+                      </div>
+                    ))
+                  )}
                 </div>
               </motion.div>
             )}
@@ -153,212 +297,199 @@ export default function Dashboard() {
       )}
 
       {/* Row 1: Hero NAV + Core Metrics */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <MetricCard 
-          title="Net Asset Value" 
-          value={formatCurrency(summary.nav)} 
-          className="xl:col-span-4 p-8 bg-gradient-to-br from-[#0d0d14] to-[#12121c] border-white/5"
-          valueClassName="text-4xl md:text-5xl lg:text-6xl text-white font-black tracking-tighter mt-4"
-        />
-        <div className="xl:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <div className="xl:col-span-4">
           <MetricCard 
-            title="Daily P&L" 
+            label="Net Asset Value" 
+            value={formatCurrency(summary.nav)} 
+            accent={true}
+            large={true}
+          />
+        </div>
+        <div className="xl:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <MetricCard 
+            label="Daily P&L" 
             value={formatCurrency(Math.abs(summary.daily_pnl))} 
-            trend={formatPct(summary.daily_return_pct)} 
-            trendColor={summary.daily_pnl >= 0 ? "text-green-500" : "text-red-500"}
-            valueClassName={summary.daily_pnl >= 0 ? "text-green-400" : "text-red-400"}
+            trend={summary.daily_pnl >= 0 ? "up" : "down"}
+            change={formatPct(summary.daily_return_pct)} 
           />
           <MetricCard 
-            title="MTD Return" 
+            label="MTD Return" 
             value={formatPct(summary.mtd_return_pct)} 
-            valueClassName="text-cyan-400" 
+            subtext="Performance this month"
           />
           <MetricCard 
-            title="YTD Return" 
+            label="YTD Return" 
             value={formatPct(summary.ytd_return_pct)} 
-            valueClassName="text-purple-400" 
+            subtext="Performance this year"
           />
           <MetricCard 
-            title="Cash Balance" 
+            label="Cash Balance" 
             value={formatCurrency(summary.cash)} 
-            valueClassName="text-amber-400" 
+            subtext="Liquid capital"
           />
         </div>
       </div>
 
       {/* Row 2: Risk & Exposure Analytics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <MetricCard 
-          title="Gross Exposure" 
-          value={formatCurrency(summary.gross_exposure)} 
-          trend={formatPct(summary.gross_exposure_pct)} 
-          icon={<ShieldAlert size={24} className="text-blue-400" />} 
-        />
-        <MetricCard 
-          title="Net Exposure" 
-          value={formatCurrency(summary.net_exposure)} 
-          trend={formatPct(summary.net_exposure_pct)} 
-          icon={<ShieldAlert size={24} className="text-indigo-400" />} 
-        />
-        <MetricCard 
-          title="Value at Risk (95%)" 
-          value={formatPct(summary.var_95 * 100)} 
-          icon={<AlertTriangle size={24} className="text-orange-400" />} 
-          valueClassName="text-orange-400"
-        />
-        <MetricCard 
-          title="Sharpe Ratio" 
-          value={(summary.sharpe_ratio || 0).toFixed(2)} 
-          icon={<Activity size={24} className="text-white" />} 
-        />
-      </div>
+      <CardSurface className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard label="Gross Exposure" value={formatCurrency(summary.gross_exposure)} change={formatPct(summary.gross_exposure_pct)} trend={summary.gross_exposure_pct >= 0 ? "up" : "down"} subtext={exposureEqualNote} />
+        <MetricCard label="Net Exposure" value={formatCurrency(summary.net_exposure)} change={exposureIsEqual ? undefined : formatPct(summary.net_exposure_pct)} trend={summary.net_exposure_pct >= 0 ? "up" : "down"} subtext={exposureEqualNote} />
+        <MetricCard label="Value at Risk (95%)" value={summary.var_95 !== null && summary.var_95 !== undefined ? formatPct(summary.var_95 * 100) : "—"} subtext="Max daily potential loss" />
+        <MetricCard label="Sharpe Ratio" value={summary.sharpe_ratio !== null && summary.sharpe_ratio !== undefined ? summary.sharpe_ratio.toFixed(2) : "—"} subtext={summary.sharpe_ratio === null || summary.sharpe_ratio === undefined || (summary.sharpe_ratio === 0 && (equity_curve || []).length < 20) ? "Insufficient history (need 20+ days)" : "Risk-adjusted return"} />
+      </CardSurface>
 
       {/* Row 3: Dominant Chart & Sidebars */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-        
-        {/* Centerpiece Chart */}
-        <div className="xl:col-span-9 glass-panel p-8 rounded-3xl min-h-[560px] bg-[#0d0d14] flex flex-col border border-white/[0.02]">
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <p className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-2">Historical Equity</p>
-              <h3 className="text-2xl font-black text-white tracking-tight">Portfolio NAV History</h3>
-            </div>
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <CardSurface className="xl:col-span-9 p-5 flex flex-col min-h-[460px]">
+          <div className="flex justify-between items-start mb-6">
+            <SectionHeader 
+              title="Portfolio NAV History" 
+              description="Historical Equity" 
+              className="mb-0"
+            />
             <div className="text-right">
-              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Max Drawdown</p>
-              <p className="text-xl font-mono font-bold text-red-400">{formatPct(summary.max_drawdown * 100)}</p>
+              <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold mb-1">Max Drawdown</p>
+              <p className="text-lg font-mono font-bold text-negative" title={summary.max_drawdown === 0 || summary.max_drawdown === null ? "Correct for single-day portfolio" : undefined}>
+                {summary.max_drawdown !== null && summary.max_drawdown !== undefined ? formatPct(summary.max_drawdown * 100) : "—"}
+              </p>
             </div>
           </div>
 
-          <div className="flex-1 w-full min-h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={equity_curve} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="navGradientHero" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#00d4ff" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#00d4ff" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
-                <XAxis dataKey="snapshot_date" stroke="rgba(255,255,255,0.2)" fontSize={11} minTickGap={50} tickMargin={10} axisLine={false} tickLine={false} />
-                <YAxis stroke="rgba(255,255,255,0.2)" fontSize={11} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: "#11121a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 16px" }}
-                  itemStyle={{ color: "#00d4ff", fontWeight: "bold", fontSize: "14px" }}
-                  labelStyle={{ color: "#888", fontSize: "11px", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "1px" }}
-                  formatter={(value: number) => formatCurrency(value)}
-                />
-                <Area type="monotone" dataKey="nav" stroke="#00d4ff" strokeWidth={3} fill="url(#navGradientHero)" />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="flex-1 w-full" style={{ minHeight: '300px' }}>
+            <ChartWrapper height={350}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={equity_curve} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="snapshot_date" stroke="var(--text-muted)" fontSize={11} minTickGap={50} tickMargin={10} axisLine={false} tickLine={false} />
+                  <YAxis stroke="var(--text-muted)" fontSize={11} domain={yDomain} tickFormatter={(value) => `$${value.toLocaleString()}`} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 4, padding: "8px 12px" }}
+                    itemStyle={{ color: "var(--accent)", fontWeight: "bold", fontSize: "13px" }}
+                    labelStyle={{ color: "var(--text-muted)", fontSize: "10px", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "1px" }}
+                    formatter={(value: number) => formatCurrency(value)}
+                  />
+                  <Area type="monotone" dataKey="nav" stroke="var(--accent)" strokeWidth={2} fill="transparent" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartWrapper>
           </div>
-        </div>
+        </CardSurface>
 
-        {/* Right Sidebar: Leaders/Laggards & Allocations */}
-        <div className="xl:col-span-3 flex flex-col gap-8">
-          <div className="glass-panel p-6 rounded-3xl bg-[#0d0d14] border border-white/[0.02]">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">Performance</h3>
-              <Link href="/portfolio" className="text-[10px] text-accent font-bold uppercase tracking-widest flex items-center gap-1 hover:text-white transition-colors">
-                Book <ArrowRight size={12} />
+        <div className="xl:col-span-3 flex flex-col gap-4">
+          <CardSurface className="p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Performance</h3>
+              <Link href="/dashboard/portfolio" className="text-[9px] text-accent font-bold uppercase tracking-widest flex items-center gap-1 hover:text-text-primary transition-colors">
+                Book <ArrowRight size={10} />
               </Link>
             </div>
-            <div className="space-y-3">
-              {[bestPerformer, worstPerformer].filter(Boolean).map((position, i) => (
-                <div key={position.ticker} className="p-4 rounded-2xl bg-surface border border-white/[0.03] flex justify-between items-center group hover:bg-[#151520] transition-colors">
+            <div className="space-y-2">
+              {[
+                { role: "best", position: bestPerformer },
+                { role: "worst", position: worstPerformer },
+              ]
+                .filter((item) => Boolean(item.position))
+                .map(({ role, position }) => (
+                <div key={`${role}-${position.ticker}`} className="p-3 rounded-sm bg-surface border border-border flex justify-between items-center group hover:bg-card transition-colors">
                   <div>
-                    <p className="text-sm font-black text-white tracking-tight">{position.ticker}</p>
-                    <p className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">{position.sector || position.asset_type}</p>
+                    <p className="text-sm font-bold text-text-primary tracking-tight">{position.ticker}</p>
+                    <p className="text-[9px] text-text-muted uppercase tracking-widest mt-0.5">{position.sector || position.asset_type}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-mono font-bold text-white">{formatCurrency(position.market_value)}</p>
-                    <p className={cn("text-[11px] font-mono font-bold mt-1", position.total_return_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                    <p className="text-[13px] font-mono font-bold text-text-primary">{formatCurrency(position.market_value)}</p>
+                    <p className={cn("text-[10px] font-mono font-bold mt-0.5", position.total_return_pct >= 0 ? "text-positive" : "text-negative")}>
                       {formatPct(position.total_return_pct)}
                     </p>
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </CardSurface>
 
-          <div className="glass-panel p-6 rounded-3xl bg-[#0d0d14] border border-white/[0.02] flex-1 flex flex-col">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-6">Asset Allocation</h3>
-            <div className="flex-1 min-h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={assetAllocation} dataKey="weight_pct" nameKey="label" innerRadius="65%" outerRadius="90%" stroke="none" paddingAngle={2}>
-                    {assetAllocation.map((_, index) => (
-                      <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value: number) => `${value.toFixed(2)}%`} 
-                    contentStyle={{ backgroundColor: "#11121a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12 }}
-                    itemStyle={{ fontWeight: "bold" }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+          <CardSurface className="p-4 flex-1 flex flex-col">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-text-muted mb-4">Asset Allocation</h3>
+            <div className="flex-1" style={{ minHeight: '200px' }}>
+              <ChartWrapper height={200}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={allocationData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={90} stroke="none" paddingAngle={1}>
+                      {allocationData.map((entry, index) => (
+                        <Cell key={index} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value: number) => `${value.toFixed(2)}%`} 
+                      contentStyle={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 4 }}
+                    />
+                    <Legend 
+                      formatter={(value, entry: any) => `${value} — ${entry.payload.value.toFixed(1)}%`} 
+                      wrapperStyle={{ fontSize: '10px', color: 'var(--text-muted)' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartWrapper>
             </div>
-          </div>
+          </CardSurface>
         </div>
       </div>
 
       {/* Row 4: Live Book */}
-      <div className="glass-panel p-8 rounded-3xl bg-[#0d0d14] border border-white/[0.02]">
-        <div className="flex justify-between items-end mb-8">
-          <div>
-            <p className="text-[10px] text-gray-500 uppercase tracking-[0.3em] font-bold mb-2">Live Ledger</p>
-            <h3 className="text-2xl font-black text-white tracking-tight">Active Positions</h3>
-          </div>
+      <CardSurface className="p-5">
+        <div className="flex justify-between items-end mb-6">
+          <SectionHeader 
+            title="Active Positions" 
+            description="Live Ledger" 
+            className="mb-0"
+          />
           <div className="text-right">
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Total Holdings</p>
-            <p className="text-2xl font-mono font-black text-accent">{summary.holdings_count}</p>
+            <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold mb-0.5">Total Holdings</p>
+            <p className="text-lg font-mono font-bold text-accent">{summary.holdings_count}</p>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse font-mono text-sm">
-            <thead className="text-[10px] text-gray-500 uppercase tracking-[0.2em] border-b border-white/5">
-              <tr>
-                <th className="px-4 py-4">Asset</th>
-                <th className="px-4 py-4 text-right">Shares</th>
-                <th className="px-4 py-4 text-right">Cost Basis</th>
-                <th className="px-4 py-4 text-right">Live Price</th>
-                <th className="px-4 py-4 text-right">Market Val</th>
-                <th className="px-4 py-4 text-right">Unrealized</th>
-                <th className="px-4 py-4 text-right">Day P&L</th>
-                <th className="px-4 py-4 text-right">Return</th>
-                <th className="px-4 py-4 text-right">Weight</th>
-              </tr>
-            </thead>
-            <tbody>
-              {positions.map((position) => (
-                <tr key={position.ticker} className="border-b border-white/[0.03] hover:bg-[#11111a] transition-colors group">
-                  <td className="px-4 py-5">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-black text-white text-base tracking-tight">{position.ticker}</span>
-                      <span className="text-[9px] text-gray-500 uppercase tracking-widest">{position.asset_type}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-5 text-right text-gray-300 font-bold">{position.shares.toFixed(4).replace(/\.?0+$/, "")}</td>
-                  <td className="px-4 py-5 text-right text-gray-400">{formatCurrency(position.avg_cost_per_share)}</td>
-                  <td className="px-4 py-5 text-right text-white font-bold">{formatCurrency(position.live_price)}</td>
-                  <td className="px-4 py-5 text-right text-white font-bold">{formatCurrency(position.market_value)}</td>
-                  <td className={cn("px-4 py-5 text-right font-bold", position.unrealized_pnl >= 0 ? "text-green-400" : "text-red-400")}>
-                    {formatCurrency(position.unrealized_pnl)}
-                  </td>
-                  <td className={cn("px-4 py-5 text-right font-bold", position.daily_pnl >= 0 ? "text-green-400" : "text-red-400")}>
-                    {formatCurrency(position.daily_pnl)}
-                  </td>
-                  <td className={cn("px-4 py-5 text-right font-bold", position.total_return_pct >= 0 ? "text-green-400" : "text-red-400")}>
-                    {formatPct(position.total_return_pct)}
-                  </td>
-                  <td className="px-4 py-5 text-right text-accent font-bold bg-accent/[0.02]">{position.weight_pct.toFixed(2)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <DataTable>
+          <thead>
+            <tr>
+              <TableHead>Asset</TableHead>
+              <TableHead className="text-right">Shares</TableHead>
+              <TableHead className="text-right">Cost Basis</TableHead>
+              <TableHead className="text-right">Live Price</TableHead>
+              <TableHead className="text-right">Market Val</TableHead>
+              <TableHead className="text-right">Unrealized</TableHead>
+              <TableHead className="text-right">Day P&L</TableHead>
+              <TableHead className="text-right">Return</TableHead>
+              <TableHead className="text-right">Weight</TableHead>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map((position) => (
+              <TableRow key={position.ticker}>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-text-primary text-[13px]">{position.ticker}</span>
+                    <span className="text-[9px] text-text-muted uppercase tracking-widest">{position.asset_type}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right text-text-secondary">{position.shares.toFixed(4).replace(/\.?0+$/, "")}</TableCell>
+                <TableCell className="text-right text-text-muted">{formatCurrency(position.avg_cost_per_share)}</TableCell>
+                <TableCell className="text-right text-text-primary">{formatCurrency(position.live_price)}</TableCell>
+                <TableCell className="text-right text-text-primary">{formatCurrency(position.market_value)}</TableCell>
+                <TableCell className={cn("text-right font-medium", position.unrealized_pnl >= 0 ? "text-positive" : "text-negative")}>
+                  {formatCurrency(position.unrealized_pnl)}
+                </TableCell>
+                <TableCell className={cn("text-right font-medium", position.daily_pnl >= 0 ? "text-positive" : "text-negative")}>
+                  {formatCurrency(position.daily_pnl)}
+                </TableCell>
+                <TableCell className={cn("text-right font-medium", position.total_return_pct >= 0 ? "text-positive" : "text-negative")}>
+                  {formatPct(position.total_return_pct)}
+                </TableCell>
+                <TableCell className="text-right text-text-primary bg-surface/20 opacity-80">{position.weight_pct.toFixed(2)}%</TableCell>
+              </TableRow>
+            ))}
+          </tbody>
+        </DataTable>
+      </CardSurface>
     </div>
   )
 }

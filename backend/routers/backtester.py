@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 from services.backtester_service import run_backtest_logic
 from services.validation_service import validate_financial_metrics
-from dependencies import get_current_user
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -20,6 +20,7 @@ class BacktestRequest(BaseModel):
 @router.post("/run")
 async def run_backtest(
     req: BacktestRequest, 
+    request: Request,
     current_user = Depends(get_current_user)
 ):
     try:

@@ -6,14 +6,12 @@ import { motion } from "framer-motion"
 import { apiFetch } from "@/lib/api"
 import { useRealtimePrices } from "@/lib/realtime-prices"
 
-
 interface TapeItem {
   name: string
   ticker: string
   value: number
   change_percent: number
 }
-
 
 export default function TickerTape() {
   const [items, setItems] = useState<TapeItem[]>([])
@@ -51,14 +49,14 @@ export default function TickerTape() {
 
   if (displayItems.length === 0) {
     return (
-      <div className="w-full glass-panel rounded-lg py-2 px-4 border border-white/5">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-gray-500 font-bold">Loading market tape...</div>
+      <div className="w-full bg-[var(--bg-surface)] rounded-sm py-2 px-4 border border-[var(--border)]">
+        <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)] font-bold">Loading market tape...</div>
       </div>
     )
   }
 
   return (
-    <div className="w-full overflow-hidden glass-panel rounded-lg py-2 flex items-center border border-white/5">
+    <div className="w-full overflow-hidden bg-[var(--bg-surface)] rounded-sm py-2 flex items-center border border-[var(--border)]">
       <motion.div
         animate={{ x: [0, -1000] }}
         transition={{ repeat: Infinity, duration: 28, ease: "linear" }}
@@ -66,11 +64,11 @@ export default function TickerTape() {
       >
         {[...displayItems, ...displayItems].map((item, index) => (
           <div key={`${item.ticker}-${index}`} className="flex gap-3 items-center font-mono text-sm">
-            <span className="font-bold text-gray-300">{item.ticker}</span>
-            <span className="text-white">{item.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-            <span className={item.change_percent >= 0 ? "text-green-400" : "text-red-400"}>
-              {item.change_percent >= 0 ? "+" : ""}
-              {item.change_percent.toFixed(2)}%
+            <span className="font-bold text-[var(--text-primary)]">{item.ticker}</span>
+            <span className="text-[var(--text-secondary)]">{(item.value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <span className={(item.change_percent ?? 0) >= 0 ? "text-[var(--positive)] font-bold" : "text-[var(--negative)] font-bold"}>
+              {(item.change_percent ?? 0) >= 0 ? "+" : ""}
+              {(item.change_percent ?? 0).toFixed(2)}%
             </span>
           </div>
         ))}

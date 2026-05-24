@@ -5,6 +5,11 @@ import asyncio
 from typing import Dict, Any, List
 import math
 from utils import safe_json
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def yf_download_with_retry(*args, **kwargs):
+    return yf.download(*args, **kwargs)
 
 def calculate_drawdown(equity_curve: pd.Series) -> pd.Series:
     if equity_curve.empty:
@@ -29,7 +34,8 @@ def calculate_metrics(equity_curve: pd.Series, initial_capital: float, risk_free
     cagr = (equity_curve.iloc[-1] / initial_capital) ** (1 / years) - 1.0 if years > 0 and (equity_curve.iloc[-1] / initial_capital) > 0 else 0
     
     annualized_volatility = returns.std() * np.sqrt(252) if not returns.empty else 0
-    sharpe_ratio = (cagr - risk_free_rate) / annualized_volatility if annualized_volatility > 1e-9 else 0
+    # Update Sharpe to use simple formula requested by user
+    sharpe_ratio = (returns.mean() / returns.std()) * np.sqrt(252) if not returns.empty and returns.std() > 1e-9 else 0
     
     negative_returns = returns[returns < 0]
     downside_deviation = negative_returns.std() * np.sqrt(252) if not negative_returns.empty else 0
@@ -92,34 +98,59 @@ def _backtest_sync(ticker, start_date, end_date, strategy_type, strategy_params,
     # Auto-fetch benchmark
     benchmark_ticker = '^NSEI' if ticker.endswith('.NS') else '^GSPC'
     
-    try:
-        data = yf.download([ticker, benchmark_ticker], start=start_date, end=end_date, group_by='ticker', progress=False)
+    def normalize_df(df, symbol):
+        if df.empty: return df
+        if isinstance(df.columns, pd.MultiIndex):
+            # Try to find symbol in any level
+            for level in range(df.columns.nlevels):
+                if symbol in df.columns.get_level_values(level):
+                    df = df.xs(symbol, axis=1, level=level).copy()
+                    break
+            else:
+                # Fallback: if symbol not found, but it's only one ticker in the MultiIndex
+                tickers = df.columns.get_level_values('Ticker').unique() if 'Ticker' in df.columns.names else []
+                if len(tickers) == 1:
+                    df = df.xs(tickers[0], axis=1, level='Ticker' if 'Ticker' in df.columns.names else 1).copy()
+                else:
+                    # Last resort: just take first level values
+                    df.columns = df.columns.get_level_values(0)
         
-        if isinstance(data.columns, pd.MultiIndex):
-            if ticker in data.columns.levels[0]:
-                df = data[ticker].copy()
-            else:
-                df = yf.download(ticker, start=start_date, end=end_date, progress=False).copy()
+        # Ensure unique columns and convert 1-col DataFrames to Series
+        df = df.loc[:, ~df.columns.duplicated()].copy()
+        for col in df.columns:
+            if isinstance(df[col], pd.DataFrame):
+                df[col] = df[col].iloc[:, 0]
+        return df
+
+    try:
+        data = yf_download_with_retry([ticker, benchmark_ticker], start=start_date, end=end_date, group_by='ticker', progress=False)
+        df = normalize_df(data, ticker)
+        bench_df = normalize_df(data, benchmark_ticker)
+        
+        # If normalization failed or returned same DF, try to get benchmark another way
+        if 'Close' not in bench_df.columns:
+             bench_df = pd.DataFrame(index=df.index)
+             bench_df['Close'] = 1.0
                 
-            if benchmark_ticker in data.columns.levels[0]:
-                bench_df = data[benchmark_ticker].copy()
-            else:
-                bench_df = pd.DataFrame(index=df.index)
-                bench_df['Close'] = 1.0
-        else:
-            df = data.copy()
-            bench_df = pd.DataFrame(index=df.index)
-            bench_df['Close'] = 1.0
-            
     except Exception as e:
         print(f"Data download error: {e}")
-        df = yf.download(ticker, start=start_date, end=end_date, progress=False).copy()
+        raw_df = yf_download_with_retry(ticker, start=start_date, end=end_date, progress=False)
+        df = normalize_df(raw_df, ticker)
         bench_df = pd.DataFrame(index=df.index)
         bench_df['Close'] = 1.0
 
     if df.empty:
         raise ValueError(f"No data found for {ticker} between {start_date} and {end_date}")
         
+    # Final check for Close
+    if 'Close' not in df.columns:
+        # Try to find any price column
+        price_cols = [c for c in df.columns if 'Close' in str(c) or 'Adj' in str(c)]
+        if price_cols:
+            df['Close'] = df[price_cols[0]]
+        else:
+            raise ValueError(f"DataFrame for {ticker} missing 'Close' column. Columns: {df.columns.tolist()}")
+
     df.dropna(subset=['Close'], inplace=True)
     for col in ['Open', 'High', 'Low']:
         if col not in df.columns: df[col] = df['Close']
@@ -132,7 +163,22 @@ def _backtest_sync(ticker, start_date, end_date, strategy_type, strategy_params,
     cost_per_side = commission_rate + slippage_rate + spread_rate
     
     df['Signal'] = 0
-    if strategy_type == 'sma_crossover':
+    if strategy_type == 'custom_signals':
+        custom_signals = strategy_params.get('signals')
+        if custom_signals is not None:
+            # Handle length mismatch: take the latest N points that match df length
+            sig_len = len(custom_signals)
+            df_len = len(df)
+            if sig_len > df_len:
+                aligned_signals = custom_signals[-df_len:]
+            elif sig_len < df_len:
+                aligned_signals = [0] * (df_len - sig_len) + custom_signals
+            else:
+                aligned_signals = custom_signals
+            
+            df['Signal'] = pd.Series(aligned_signals, index=df.index).fillna(0).astype(int)
+        
+    elif strategy_type == 'sma_crossover':
         fast = strategy_params.get('fast_period', 50)
         slow = strategy_params.get('slow_period', 200)
         df['Fast_SMA'] = df['Close'].rolling(window=fast).mean()
@@ -465,11 +511,15 @@ def _backtest_sync(ticker, start_date, end_date, strategy_type, strategy_params,
     
     chart_data = []
     for date, row in eq_df.iterrows():
+        date_str = date.strftime('%Y-%m-%d')
+        val = float(row['equity'])
         chart_data.append({
-            "time": date.strftime('%Y-%m-%d'),
-            "equity": float(row['equity']),
-            "bnh_equity": float(bnh_equity.loc[date]),
-            "drawdown": float(drawdown_series.loc[date])
+            "date": date_str,
+            "time": date_str, # Keep time for legacy
+            "value": round(val, 2),
+            "equity": round(val, 2),
+            "bnh_equity": round(float(bnh_equity.loc[date]), 2),
+            "drawdown": round(float(drawdown_series.loc[date]), 4)
         })
         
     try:

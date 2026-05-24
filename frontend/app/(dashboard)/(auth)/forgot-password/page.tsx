@@ -37,15 +37,15 @@ export default function ForgotPasswordPage() {
   if (success) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="w-full max-w-md p-8 glass-panel rounded-2xl text-center space-y-4">
+        <div className="w-full max-w-md p-8 glass-panel rounded-2xl text-center space-y-4 bg-surface">
           <div className="mx-auto w-12 h-12 bg-accent/20 text-accent rounded-full flex items-center justify-center">
             <MailCheck size={24} />
           </div>
-          <h1 className="text-2xl font-bold text-white">Reset link sent</h1>
-          <p className="text-muted-foreground">
-            We&apos;ve sent a password reset link to <span className="text-white font-medium">{email}</span>.
+          <h1 className="text-2xl font-bold text-foreground">Reset link sent</h1>
+          <p className="text-text-muted">
+            We&apos;ve sent a password reset link to <span className="text-foreground font-bold">{email}</span>.
           </p>
-          <Button asChild className="w-full mt-4 bg-accent hover:bg-accent/90 text-black font-semibold">
+          <Button asChild className="w-full mt-4 bg-accent hover:bg-accent/90 text-foreground font-bold">
             <Link href="/login">Return to Login</Link>
           </Button>
         </div>
@@ -55,21 +55,21 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6">
+      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6 bg-surface">
         <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-white">Reset Password</h1>
-          <p className="text-muted-foreground">Enter your email to receive a reset link</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Reset Password</h1>
+          <p className="text-text-muted">Enter your email to receive a reset link</p>
         </div>
 
         {error && (
-          <div className="p-3 text-sm font-medium text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 text-sm font-medium text-negative bg-negative/10 border border-negative/20 rounded-lg">
             {error}
           </div>
         )}
 
         <form onSubmit={handleReset} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-foreground">Email</Label>
             <Input
               id="email"
               type="email"
@@ -77,16 +77,16 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-white/5 border-white/10"
+              className="bg-surface border-border text-foreground"
             />
           </div>
 
-          <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-black font-semibold" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-foreground font-bold" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Send Reset Link'}
           </Button>
         </form>
 
-        <Link href="/login" className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-white transition-colors">
+        <Link href="/login" className="flex items-center justify-center gap-2 text-sm text-text-muted hover:text-foreground transition-colors font-medium">
           <ArrowLeft size={14} />
           Back to Login
         </Link>

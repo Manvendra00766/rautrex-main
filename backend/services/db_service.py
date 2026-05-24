@@ -16,14 +16,15 @@ async def update_profile(user_id: str, data: dict):
 
 async def get_portfolios(user_id: str):
     return supabase.table("portfolios") \
-        .select("*, portfolio_positions(*), portfolio_transactions(*)") \
+        .select("*, portfolio_positions(*), transactions(*)") \
         .eq("user_id", user_id).execute()
 
 async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", cash_balance: float = 0, description: str = None):
+    # FIXED: Record initial NAV snapshot on portfolio creation so history charts render instantly with a baseline
     existing = supabase.table("portfolios").select("id").eq("user_id", user_id).limit(1).execute()
     is_default = not bool(existing.data)
     
-    return supabase.table("portfolios").insert({
+    res = supabase.table("portfolios").insert({
         "user_id": user_id, 
         "name": name, 
         "strategy": strategy,
@@ -32,9 +33,36 @@ async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", ca
         "initial_cash": cash_balance,
         "is_default": is_default,
     }).execute()
+    
+    if res.data:
+        portfolio_id = res.data[0]['id']
+        try:
+            today = datetime.now(tz=timezone.utc).date().isoformat()
+            supabase.table("historical_equity").insert({
+                "user_id": user_id,
+                "portfolio_id": portfolio_id,
+                "snapshot_date": today,
+                "nav": cash_balance,
+                "cash_balance": cash_balance,
+                "market_value": 0.0,
+                "daily_pnl": 0.0,
+                "gross_exposure": 0.0,
+                "net_exposure": 0.0,
+            }).execute()
+        except Exception as e:
+            print(f"Failed to record initial historical equity: {e}")
+            
+    return res
 
 async def delete_portfolio(portfolio_id: str, user_id: str):
     return supabase.table("portfolios").delete().eq("id", portfolio_id).eq("user_id", user_id).execute()
+
+async def get_portfolio_by_id(portfolio_id: str):
+    try:
+        response = supabase.table("portfolios").select("*").eq("id", portfolio_id).limit(1).execute()
+        return response.data[0] if response.data else None
+    except Exception:
+        return None
 
 async def update_portfolio_cash(portfolio_id: str, new_cash_balance: float):
     if new_cash_balance < 0:
@@ -52,7 +80,7 @@ async def record_transaction(portfolio_id: str, ticker: str, transaction_type: s
     if price_per_share <= 0:
         raise ValueError("Price per share must be positive")
 
-    return supabase.table("portfolio_transactions").insert({
+    return supabase.table("transactions").insert({
         "portfolio_id": portfolio_id,
         "ticker": ticker.upper(),
         "transaction_type": transaction_type.upper(),
@@ -62,7 +90,7 @@ async def record_transaction(portfolio_id: str, ticker: str, transaction_type: s
     }).execute()
 
 async def get_transactions(portfolio_id: str, limit: int = 50, offset: int = 0):
-    return supabase.table("portfolio_transactions") \
+    return supabase.table("transactions") \
         .select("*") \
         .eq("portfolio_id", portfolio_id) \
         .order("created_at", ascending=False) \

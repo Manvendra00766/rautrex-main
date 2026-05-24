@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
+import { formatError } from '@/lib/utils'
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,31 +41,35 @@ export default function LoginPage() {
   }
 
   const handleGoogleLogin = async () => {
+    // SSR-safe way to get the origin
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL || origin}/auth/callback`;
+    
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback`,
+        redirectTo,
       },
     })
   }
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6">
+      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6 bg-surface">
         <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-white">Welcome back</h1>
-          <p className="text-muted-foreground">Enter your credentials to access your terminal</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Welcome back</h1>
+          <p className="text-text-muted">Enter your credentials to access your terminal</p>
         </div>
 
         {error && (
-          <div className="p-3 text-sm font-medium text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg">
+          <div className="p-3 text-sm font-medium text-negative bg-negative/10 border border-negative/20 rounded-lg">
             {error}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-foreground">Email</Label>
             <Input
               id="email"
               type="email"
@@ -71,12 +77,12 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-white/5 border-white/10"
+              className="bg-surface border-border text-foreground"
             />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-foreground">Password</Label>
               <Link
                 href="/forgot-password"
                 className="text-xs text-accent hover:underline"
@@ -91,36 +97,36 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-white/5 border-white/10 pr-10"
+                className="bg-surface border-border text-foreground pr-10"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-foreground"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
 
-          <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-black font-semibold" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-foreground font-bold" disabled={isLoading}>
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Sign In'}
           </Button>
         </form>
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-white/10"></span>
+            <span className="w-full border-t border-border"></span>
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-[#0a0a0f] px-2 text-muted-foreground">Or continue with</span>
+            <span className="bg-surface px-2 text-text-muted font-bold">Or continue with</span>
           </div>
         </div>
 
         <Button
           type="button"
           variant="outline"
-          className="w-full border-white/10 hover:bg-white/5"
+          className="w-full border-border bg-surface hover:bg-elevated/50 text-foreground"
           onClick={handleGoogleLogin}
         >
           <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
@@ -144,9 +150,9 @@ export default function LoginPage() {
           Google
         </Button>
 
-        <p className="text-center text-sm text-muted-foreground">
+        <p className="text-center text-sm text-text-muted">
           Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-accent hover:underline">
+          <Link href="/signup" className="text-accent hover:underline font-bold">
             Sign up
           </Link>
         </p>

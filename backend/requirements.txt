@@ -1,3 +1,4 @@
+slowapi
 fastapi
 uvicorn
 gunicorn
@@ -23,5 +24,18 @@ sqlalchemy
 asyncpg
 apscheduler
 greenlet
-PyJWT
+python-jose[cryptography]
 supabase
+redis
+loguru
+pydantic-settings
+tenacity
+respx
+matplotlib
+reportlab
+python-dateutil
+plotly
+pytest-asyncio
+pytest-mock
+prometheus-fastapi-instrumentator
+sentry-sdk

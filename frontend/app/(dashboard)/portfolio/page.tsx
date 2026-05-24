@@ -49,7 +49,7 @@ import AddAssetModal from "@/components/portfolios/AddAssetModal"
 import DeletePortfolioModal from "@/components/portfolios/DeletePortfolioModal"
 
 
-const PIE_COLORS = ["#00d4ff", "#10b981", "#f59e0b", "#7c3aed", "#f43f5e", "#6366f1", "#22c55e", "#a855f7"]
+const PIE_COLORS = ["#A67C52", "#D8CFC5", "#8A847D", "#5E5A56", "#2F6B3D", "#C2B8AD", "#EFE8DF"]
 const STRATEGIES = ["Equity", "Growth", "Dividend", "Crypto", "Options"]
 
 

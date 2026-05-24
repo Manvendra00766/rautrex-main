@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
 
+export function useHasMounted() {
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+  return hasMounted;
+}
+
 export function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false);
 

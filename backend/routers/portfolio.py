@@ -12,7 +12,7 @@ from services.portfolio_service import (
 )
 from services.portfolio_engine import create_transaction, get_portfolio_overview
 from services.validation_service import validate_financial_metrics
-from dependencies import get_current_user
+from auth import get_current_user
 
 router = APIRouter()
 
@@ -78,7 +78,7 @@ async def add_portfolio_transaction(
     current_user=Depends(get_current_user),
 ):
     try:
-        portfolio_check = supabase.table("portfolios").select("user_id").eq("id", req.portfolio_id).single().execute()
+        portfolio_check = current_user.db.table("portfolios").select("user_id").eq("id", req.portfolio_id).single().execute()
         if not portfolio_check.data or portfolio_check.data.get("user_id") != current_user.id:
             raise HTTPException(status_code=403, detail="Unauthorized")
 

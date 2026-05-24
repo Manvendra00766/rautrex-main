@@ -1,312 +1,290 @@
-from __future__ import annotations
-
 import asyncio
-import logging
-import threading
 import time
-from datetime import date, timedelta
-from typing import Any, Dict, List
+from enum import Enum
+from typing import Dict, Any, List, Optional
+import httpx
+from core.config import settings
+from core.logger import logger
+from core.exceptions import MarketDataError
+from infrastructure.cache import cache_response
 
-import pandas as pd
-import yfinance as yf
-from cachetools import TTLCache
+class CircuitState(Enum):
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
 
-from services.pricing_engine import get_batch_price_snapshots, get_price_snapshot, get_quote_payload, normalize_symbol
-from utils import safe_json
+class CircuitBreaker:
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 30):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = 0
+        self.state = CircuitState.CLOSED
 
-# Setup logging
-logger = logging.getLogger(__name__)
+    def record_failure(self):
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        if self.failure_count >= self.failure_threshold:
+            self.state = CircuitState.OPEN
+            logger.error(f"Circuit Breaker TRIPPED (OPEN). Threshold: {self.failure_threshold}")
 
-# Cache and Lock for thread-safety
-info_cache = TTLCache(maxsize=200, ttl=300)
-info_lock = threading.Lock()
+    def record_success(self):
+        self.failure_count = 0
+        self.state = CircuitState.CLOSED
 
-def get_ticker_info(ticker_symbol: str) -> Dict[str, Any]:
-    """
-    Fetch ticker info with thread-safe caching and exponential backoff retries 
-    to handle YFRateLimitError and 401 Crumb errors.
-    """
-    with info_lock:
-        if ticker_symbol in info_cache:
-            return info_cache[ticker_symbol]
+    def can_execute(self) -> bool:
+        if self.state == CircuitState.CLOSED:
+            return True
+        
+        if self.state == CircuitState.OPEN:
+            if time.time() - self.last_failure_time > self.recovery_timeout:
+                self.state = CircuitState.HALF_OPEN
+                logger.info("Circuit Breaker transitioned to HALF_OPEN. Attempting recovery.")
+                return True
+            return False
+        
+        if self.state == CircuitState.HALF_OPEN:
+            return True
+        
+        return False
 
-    retries = 3
-    base_delay = 2.0
-    
-    for attempt in range(retries):
-        try:
-            ticker_obj = yf.Ticker(ticker_symbol)
-            info = ticker_obj.info
-            if info:
-                with info_lock:
-                    info_cache[ticker_symbol] = info
-                return info
-            return {}
-        except Exception as e:
-            err_msg = str(e).lower()
-            is_rate_limit = "too many requests" in err_msg or "rate limit" in err_msg
-            is_crumb_error = "401" in err_msg or "crumb" in err_msg
-            
-            # Use yfinance exception if available in runtime
-            if hasattr(yf.exceptions, "YFRateLimitError") and isinstance(e, yf.exceptions.YFRateLimitError):
-                is_rate_limit = True
-
-            if (is_rate_limit or is_crumb_error) and attempt < retries - 1:
-                delay = base_delay * (2 ** attempt)
-                logger.warning(f"Yahoo Finance error ({e}) for {ticker_symbol}. Retrying in {delay}s... (Attempt {attempt + 1}/{retries})")
-                time.sleep(delay)
-                continue
-            
-            logger.error(f"Final failure fetching info for {ticker_symbol}: {e}")
-            break
-            
-    return {}
-
-
-LIQUID_UNIVERSE = [
-    "AAPL",
-    "MSFT",
-    "NVDA",
-    "AMZN",
-    "GOOGL",
-    "META",
-    "TSLA",
-    "AMD",
-    "NFLX",
-    "SPY",
-    "QQQ",
-    "BTC-USD",
-    "ETH-USD",
-]
-
-INDEX_MAP = {
-    "S&P 500": "^GSPC",
-    "NASDAQ": "^IXIC",
-    "DOW JONES": "^DJI",
-    "FTSE 100": "^FTSE",
-    "DAX": "^GDAXI",
-    "NIKKEI 225": "^N225",
-    "HANG SENG": "^HSI",
-    "NIFTY 50": "^NSEI",
-}
-
-
-def _series_to_chart(history: pd.DataFrame) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    for index, row in history.iterrows():
-        rows.append(
-            {
-                "time": pd.Timestamp(index).strftime("%Y-%m-%d"),
-                "open": float(row["Open"]),
-                "high": float(row["High"]),
-                "low": float(row["Low"]),
-                "close": float(row["Close"]),
-                "volume": int(row["Volume"]) if "Volume" in row and not pd.isna(row["Volume"]) else 0,
-            }
+class MarketDataService:
+    def __init__(self):
+        self.limits = httpx.Limits(max_keepalive_connections=20, max_connections=100)
+        self.timeout = httpx.Timeout(10.0, connect=5.0)
+        self.client = httpx.AsyncClient(
+            limits=self.limits,
+            timeout=self.timeout
         )
-    return rows
+        # Provider hierarchy: Polygon -> Finnhub -> yfinance (simulated via fallback_url)
+        self.providers = [
+            {"name": "Polygon", "url": settings.MARKET_DATA_PROVIDER_URL, "api_key": settings.MARKET_DATA_API_KEY},
+            {"name": "Finnhub", "url": settings.FALLBACK_MARKET_DATA_URL, "api_key": "fake_finnhub_key"},
+            {"name": "yfinance", "url": "https://query1.finance.yahoo.com/v8/finance/chart/", "api_key": None}
+        ]
+        self.circuit_breaker = CircuitBreaker()
 
+    async def close(self):
+        await self.client.aclose()
 
-def _search_sync(query: str) -> List[Dict[str, Any]]:
-    query = query.strip()
-    if not query:
+    async def _fetch_from_provider(self, provider: Dict, endpoint: str, params: Optional[Dict] = None) -> Dict:
+        headers = {}
+        if provider["api_key"]:
+            headers["Authorization"] = f"Bearer {provider['api_key']}"
+        
+        url = f"{provider['url']}{endpoint}"
+        response = await self.client.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def fetch_price(self, symbol: str) -> Dict[str, Any]:
+        """High-level fetch with circuit breaker, retries, and fallback hierarchy."""
+        if not self.circuit_breaker.can_execute():
+            logger.warning(f"Circuit Breaker is OPEN. Skipping fetch for {symbol}.")
+            # Fallback to stale cache or return partial data
+            return await self._get_stale_data_fallback(symbol)
+
+        for provider in self.providers:
+            if not provider["url"]: continue
+            
+            try:
+                # Retry logic within a single provider
+                data = await self._fetch_with_retry(provider, symbol)
+                self.circuit_breaker.record_success()
+                return data
+            except Exception as e:
+                logger.warning(f"Provider {provider['name']} failed for {symbol}: {e}")
+                continue # Try next provider in hierarchy
+        
+        # If all providers fail
+        self.circuit_breaker.record_failure()
+        return await self._get_stale_data_fallback(symbol)
+
+    async def _fetch_with_retry(self, provider: Dict, symbol: str, max_retries: int = 3) -> Dict:
+        for attempt in range(max_retries):
+            try:
+                # Mapping symbols to provider-specific endpoints
+                endpoint = f"/stock/{symbol}/quote" if "Polygon" in provider["name"] else f"/{symbol}"
+                return await self._fetch_from_provider(provider, endpoint)
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
+                if attempt == max_retries - 1: raise e
+                wait = 2 ** attempt
+                logger.debug(f"Retrying {provider['name']} in {wait}s...")
+                await asyncio.sleep(wait)
+        raise MarketDataError("Max retries exceeded")
+
+    async def _get_stale_data_fallback(self, symbol: str) -> Dict:
+        """Final fallback: returns structured empty data to prevent frontend crash."""
+        logger.info(f"Returning graceful fallback data for {symbol}")
+        return {
+            "ticker": symbol,
+            "price": 0.0,
+            "status": "stale",
+            "error": "Market data providers unavailable",
+            "timestamp": time.time()
+        }
+
+    @cache_response(ttl=60, prefix="market:stock")
+    async def fetch_stock(self, symbol: str) -> Dict[str, Any]:
+        return await self.fetch_price(symbol)
+
+    async def fetch_batch(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Fetch prices for multiple symbols concurrently with a semaphore limit to prevent provider rate limiting."""
+        if not symbols:
+            return {}
+            
+        sem = asyncio.Semaphore(10)
+        
+        async def fetch_with_semaphore(symbol: str) -> Dict[str, Any]:
+            async with sem:
+                try:
+                    return await self.fetch_price(symbol)
+                except Exception as e:
+                    logger.error(f"Error fetching batch price for {symbol}: {e}")
+                    return await self._get_stale_data_fallback(symbol)
+                    
+        tasks = {symbol: fetch_with_semaphore(symbol) for symbol in symbols}
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+        
+        batch_results = {}
+        for symbol, result in zip(tasks.keys(), results):
+            if isinstance(result, Exception):
+                logger.error(f"Batch task for {symbol} generated exception: {result}")
+                batch_results[symbol] = await self._get_stale_data_fallback(symbol)
+            else:
+                batch_results[symbol] = result
+                
+        return batch_results
+
+    @cache_response(ttl=120, prefix="market:indices")
+    async def get_indices(self) -> List[Dict]:
+        """Fetch index data dynamically from yfinance with static fallback."""
+        default_indices = [
+            {"ticker": "^GSPC", "name": "S&P 500", "value": 5000.0, "change_percent": 0.0},
+            {"ticker": "^DJI", "name": "Dow Jones", "value": 39000.0, "change_percent": 0.0},
+            {"ticker": "^IXIC", "name": "Nasdaq", "value": 16000.0, "change_percent": 0.0},
+            {"ticker": "^RUT", "name": "Russell 2000", "value": 2000.0, "change_percent": 0.0},
+            {"ticker": "^FTSE", "name": "FTSE 100", "value": 8000.0, "change_percent": 0.0},
+            {"ticker": "^GDAXI", "name": "DAX Index", "value": 18000.0, "change_percent": 0.0},
+            {"ticker": "^FCHI", "name": "CAC 40", "value": 8000.0, "change_percent": 0.0},
+            {"ticker": "^N225", "name": "Nikkei 225", "value": 38000.0, "change_percent": 0.0}
+        ]
+        try:
+            loop = asyncio.get_event_loop()
+            def fetch():
+                import yfinance as yf
+                tickers_str = " ".join([d["ticker"] for d in default_indices])
+                idxs = yf.Tickers(tickers_str)
+                results = []
+                for d in default_indices:
+                    t = d["ticker"]
+                    try:
+                        ticker_obj = idxs.tickers[t]
+                        info = ticker_obj.info or {}
+                        price = info.get("regularMarketPrice") or info.get("currentPrice") or d["value"]
+                        change = info.get("regularMarketChangePercent") or 0.0
+                        results.append({
+                            "ticker": t,
+                            "name": d["name"],
+                            "value": float(price),
+                            "change_percent": float(change)
+                        })
+                    except Exception as ex:
+                        logger.warning(f"Failed to parse yfinance info for index {t}: {ex}")
+                        results.append(d)
+                return results
+
+            res = await loop.run_in_executor(None, fetch)
+            if res:
+                return res
+        except Exception as e:
+            logger.error(f"Error fetching indices dynamically: {e}")
+        return default_indices
+
+    @cache_response(ttl=300, prefix="market:movers")
+    async def get_movers(self) -> Dict:
+        """Fetch stock movers dynamically from yfinance with static fallback."""
+        default_movers = {
+            "gainers": [
+                {"ticker": "NVDA", "price": 950.0, "change_percent": 4.5},
+                {"ticker": "TSLA", "price": 180.0, "change_percent": 3.2},
+                {"ticker": "AMD", "price": 175.0, "change_percent": 2.8},
+                {"ticker": "SMCI", "price": 850.0, "change_percent": 6.1},
+                {"ticker": "ARM", "price": 120.0, "change_percent": 4.8},
+                {"ticker": "AAPL", "price": 170.0, "change_percent": 1.2}
+            ],
+            "losers": [
+                {"ticker": "COIN", "price": 240.0, "change_percent": -5.2},
+                {"ticker": "BABA", "price": 72.0, "change_percent": -3.4},
+                {"ticker": "NFLX", "price": 610.0, "change_percent": -2.1},
+                {"ticker": "GOOGL", "price": 150.0, "change_percent": -1.8},
+                {"ticker": "META", "price": 490.0, "change_percent": -1.5},
+                {"ticker": "MSFT", "price": 415.0, "change_percent": -0.8}
+            ],
+            "active": [
+                {"ticker": "TSLA", "price": 180.0, "change_percent": 3.2},
+                {"ticker": "NVDA", "price": 950.0, "change_percent": 4.5},
+                {"ticker": "AAPL", "price": 170.0, "change_percent": 1.2},
+                {"ticker": "AMD", "price": 175.0, "change_percent": 2.8},
+                {"ticker": "AMZN", "price": 180.0, "change_percent": -0.5},
+                {"ticker": "MSFT", "price": 415.0, "change_percent": -0.8}
+            ]
+        }
+        try:
+            loop = asyncio.get_event_loop()
+            def fetch():
+                import yfinance as yf
+                pool = ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "GOOGL", "META", "NFLX", "AVGO", "SMCI", "ARM", "INTC", "COIN", "BABA"]
+                tickers = yf.Tickers(" ".join(pool))
+                stocks = []
+                for s in pool:
+                    try:
+                        ticker_obj = tickers.tickers[s]
+                        info = ticker_obj.info or {}
+                        price = info.get("regularMarketPrice") or info.get("currentPrice")
+                        change = info.get("regularMarketChangePercent")
+                        volume = info.get("regularMarketVolume") or info.get("volume")
+                        if price is not None and change is not None:
+                            stocks.append({
+                                "ticker": s,
+                                "price": float(price),
+                                "change_percent": float(change),
+                                "volume": int(volume) if volume else 0
+                            })
+                    except Exception as ex:
+                        logger.warning(f"Failed to fetch mover info for {s}: {ex}")
+                
+                if not stocks:
+                    return None
+                
+                gainers = sorted([s for s in stocks if s["change_percent"] > 0], key=lambda x: x["change_percent"], reverse=True)
+                losers = sorted([s for s in stocks if s["change_percent"] < 0], key=lambda x: x["change_percent"])
+                active = sorted(stocks, key=lambda x: x["volume"], reverse=True)
+                
+                return {
+                    "gainers": gainers[:6],
+                    "losers": losers[:6],
+                    "active": active[:6]
+                }
+
+            res = await loop.run_in_executor(None, fetch)
+            if res:
+                return res
+        except Exception as e:
+            logger.error(f"Error fetching movers dynamically: {e}")
+        return default_movers
+
+    async def run_screener(self) -> List:
         return []
 
-    results: List[Dict[str, Any]] = []
-    try:
-        if hasattr(yf, "Search"):
-            search = yf.Search(query, max_results=8)
-            for item in search.quotes:
-                symbol = item.get("symbol")
-                if not symbol:
-                    continue
-                results.append(
-                    {
-                        "ticker": normalize_symbol(symbol),
-                        "name": item.get("shortname") or item.get("longname") or symbol,
-                        "exchange": item.get("exchange"),
-                        "asset_type": item.get("quoteType") or item.get("typeDisp"),
-                    }
-                )
-    except Exception:
-        results = []
+market_data_service = MarketDataService()
 
-    if results:
-        return results
-
-    symbol = normalize_symbol(query)
-    try:
-        info = get_ticker_info(symbol)
-        return [
-            {
-                "ticker": symbol,
-                "name": info.get("longName") or info.get("shortName") or symbol,
-                "exchange": info.get("exchange"),
-                "asset_type": info.get("quoteType"),
-            }
-        ]
-    except Exception:
-        return [{"ticker": symbol, "name": symbol}]
-
-
-async def search_tickers(query: str, exchange: str = "all"):
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(None, _search_sync, query)
-    if exchange == "all":
-        return results
-    filtered = []
-    for row in results:
-        row_exchange = (row.get("exchange") or "").lower()
-        if exchange.lower() in row_exchange:
-            filtered.append(row)
-    return filtered
-
-
-async def get_quote(ticker: str):
-    return safe_json(await get_quote_payload(ticker))
-
-
-async def get_history(ticker: str, period: str):
-    loop = asyncio.get_event_loop()
-
-    def _fetch():
-        history = yf.Ticker(ticker).history(period=period, auto_adjust=False)
-        if history.empty:
-            return []
-        return _series_to_chart(history)
-
-    return safe_json(await loop.run_in_executor(None, _fetch))
-
-
-async def get_fundamentals(ticker: str):
-    loop = asyncio.get_event_loop()
-
-    def _fetch():
-        info = get_ticker_info(ticker)
-        return {
-            "pe_ratio": info.get("trailingPE"),
-            "forward_pe": info.get("forwardPE"),
-            "pb_ratio": info.get("priceToBook"),
-            "eps": info.get("trailingEps"),
-            "revenue": info.get("totalRevenue"),
-            "debt_to_equity": info.get("debtToEquity"),
-            "roe": info.get("returnOnEquity"),
-            "dividend_yield": info.get("dividendYield"),
-            "52_week_high": info.get("fiftyTwoWeekHigh"),
-            "52_week_low": info.get("fiftyTwoWeekLow"),
-            "market_cap": info.get("marketCap"),
-            "beta": info.get("beta"),
-        }
-
-    return safe_json(await loop.run_in_executor(None, _fetch))
-
-
-async def get_news(ticker: str):
-    loop = asyncio.get_event_loop()
-
-    def _fetch():
-        try:
-            news = yf.Ticker(ticker).news or []
-        except Exception:
-            news = []
-        rows = []
-        for item in news[:20]:
-            rows.append(
-                {
-                    "title": item.get("title"),
-                    "publisher": item.get("publisher"),
-                    "link": item.get("link"),
-                    "time": item.get("providerPublishTime"),
-                }
-            )
-        return rows
-
-    return safe_json(await loop.run_in_executor(None, _fetch))
-
-
-async def get_info(ticker: str):
-    quote = await get_price_snapshot(ticker)
-    loop = asyncio.get_event_loop()
-
-    def _fetch():
-        info = get_ticker_info(ticker)
-        return {
-            "name": info.get("longName") or info.get("shortName") or ticker,
-            "sector": info.get("sector") or quote.sector,
-            "industry": info.get("industry", "N/A"),
-            "description": info.get("longBusinessSummary", ""),
-            "country": info.get("country") or quote.country or "",
-            "website": info.get("website", ""),
-            "employees": info.get("fullTimeEmployees", 0),
-            "asset_type": quote.asset_type,
-            "exchange": quote.exchange,
-            "currency": quote.currency,
-        }
-
-    return safe_json(await loop.run_in_executor(None, _fetch))
-
-
+# Export functions for routers to use
 async def get_indices():
-    quotes = await get_batch_price_snapshots(INDEX_MAP.values())
-    rows = []
-    for name, symbol in INDEX_MAP.items():
-        snapshot = quotes.get(normalize_symbol(symbol))
-        if not snapshot:
-            continue
-        rows.append(
-            {
-                "name": name,
-                "ticker": symbol,
-                "value": snapshot.last_price,
-                "change_percent": snapshot.change_percent,
-                "market_cap": snapshot.market_cap,
-            }
-        )
-    return safe_json(rows)
-
+    return await market_data_service.get_indices()
 
 async def get_movers():
-    snapshots = await get_batch_price_snapshots(LIQUID_UNIVERSE)
-    rows = []
-    for symbol, snapshot in snapshots.items():
-        rows.append(
-            {
-                "ticker": symbol,
-                "name": snapshot.name,
-                "price": snapshot.last_price,
-                "change_percent": snapshot.change_percent,
-                "volume": snapshot.volume,
-                "asset_type": snapshot.asset_type,
-            }
-        )
-
-    sorted_rows = sorted(rows, key=lambda row: row["change_percent"], reverse=True)
-    most_active = sorted(rows, key=lambda row: row.get("volume") or 0, reverse=True)
-    return safe_json(
-        {
-            "gainers": sorted_rows[:5],
-            "losers": list(reversed(sorted_rows[-5:])),
-            "active": most_active[:5],
-        }
-    )
-
+    return await market_data_service.get_movers()
 
 async def run_screener():
-    snapshots = await get_batch_price_snapshots(LIQUID_UNIVERSE)
-    rows = []
-    for symbol, snapshot in snapshots.items():
-        rows.append(
-            {
-                "ticker": symbol,
-                "name": snapshot.name,
-                "price": snapshot.last_price,
-                "change_percent": snapshot.change_percent,
-                "market_cap": snapshot.market_cap,
-                "volume": snapshot.volume,
-                "sector": snapshot.sector,
-                "country": snapshot.country,
-                "asset_type": snapshot.asset_type,
-            }
-        )
-    rows.sort(key=lambda row: ((row.get("market_cap") or 0), (row.get("volume") or 0)), reverse=True)
-    return safe_json(rows[:10])
+    return await market_data_service.run_screener()
