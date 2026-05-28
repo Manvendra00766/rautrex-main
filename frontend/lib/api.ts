@@ -60,13 +60,18 @@ async function getFreshToken(): Promise<string | null> {
     const supabase = createClient();
     const { data: { session }, error } = await supabase.auth.getSession();
     
-    if (session?.access_token && !isTokenExpired(session.access_token)) {
+    if (!session) {
+      cachedToken = null;
+      return null;
+    }
+    
+    if (session.access_token && !isTokenExpired(session.access_token)) {
       cachedToken = session.access_token;
       return session.access_token;
     }
 
-    // Session is null, expired, or close to expiring — attempt refresh
-    console.log('[API] Session missing, expired, or close to expiring. Attempting refresh...');
+    // Session is expired or close to expiring — attempt refresh
+    console.log('[API] Session expired or close to expiring. Attempting refresh...');
     const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
     
     if (refreshed?.session?.access_token && !refreshError) {

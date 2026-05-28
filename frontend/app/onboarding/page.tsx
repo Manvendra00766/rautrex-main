@@ -261,6 +261,32 @@ export default function OnboardingPage() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadSuccess, setUploadSuccess] = useState(false)
 
+  // Handle Upstox OAuth redirect callback on the frontend
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    
+    if (code) {
+      const exchangeUpstoxCode = async () => {
+        setLoading(true)
+        setLoadingMessage("Securing connection with Upstox...")
+        try {
+          const res = await apiFetch(`/onboarding/upstox-callback?code=${code}`)
+          setLoadingMessage("Analyzing holdings...")
+          alert("Successfully synced with your Upstox portfolio!")
+          router.push('/dashboard')
+        } catch (err) {
+          console.error("Upstox callback exchange error", err)
+          alert("Failed to sync your holdings from Upstox. Please check your credentials or try again.")
+        } finally {
+          setLoading(false)
+        }
+      }
+      exchangeUpstoxCode()
+    }
+  }, [router])
+
   // Handle selecting investor type at step 0
   const handleSelectInvestorType = (type: 'new' | 'existing') => {
     setDirection(1)
@@ -269,7 +295,25 @@ export default function OnboardingPage() {
   }
 
   // Handle connecting a specific demat broker
-  const handleConnectBroker = (broker: string) => {
+  const handleConnectBroker = async (broker: string) => {
+    if (broker === 'Upstox') {
+      setDematSyncing(true)
+      try {
+        const data = await apiFetch("/onboarding/upstox-login")
+        if (data && data.auth_url) {
+          window.location.href = data.auth_url
+        } else {
+          alert("Failed to initiate Upstox login. Make sure your client credentials are set in the .env file.")
+          setDematSyncing(false)
+        }
+      } catch (err) {
+        console.error("Upstox auth initiation error", err)
+        alert("Failed to connect with Upstox API. Please check your network and try again.")
+        setDematSyncing(false)
+      }
+      return
+    }
+
     setSelectedBroker(broker)
     setDematClientId('')
     setDematPin('')
