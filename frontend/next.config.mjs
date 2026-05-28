@@ -42,7 +42,7 @@ const nextConfig = {
     if (isProd) {
       headers.push({
         key: 'Content-Security-Policy',
-        value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:8000 ws://localhost:3000; font-src 'self' data:; frame-src 'self'; object-src 'none';",
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.hf.space wss://*.hf.space http://localhost:8000 ws://localhost:3000; font-src 'self' data:; frame-src 'self'; object-src 'none';",
       });
     }
 
