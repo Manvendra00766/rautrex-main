@@ -682,8 +682,8 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
                 close_price = float(h.get("close_price") or 0.0)
                 last_price = float(h.get("last_price") or avg_cost)
                 
-                if inst_type == "GB" or exch == "NSE_GS":
-                    instrument_key = f"NSE_GS:{h.get('tradingsymbol')}"
+                if inst_type == "GB" or exch == "NSE_GS" or "GS" in h.get("tradingsymbol", "") or "GB" in h.get("tradingsymbol", ""):
+                    instrument_key = h.get("instrument_token") or f"NSE_EQ|{h.get('isin')}"
                     try:
                         quote_url = "https://api.upstox.com/v2/market-quote/quotes"
                         quote_res = requests.get(
@@ -693,10 +693,11 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
                             timeout=10
                         )
                         if quote_res.status_code == 200:
-                            quote_data = quote_res.json().get("data", {}).get(instrument_key) or {}
+                            quote_dict = quote_res.json().get("data", {})
+                            quote_data = next(iter(quote_dict.values())) if quote_dict else None
                             if quote_data:
-                                last_price = float(quote_data.get("last_price") or last_price)
-                                close_price = float(quote_data.get("close") or close_price or last_price)
+                                last_price = float(quote_data.get("last_price") or quote_data.get("last_traded_price") or last_price)
+                                close_price = float(quote_data.get("close") or quote_data.get("ohlc", {}).get("close") or close_price or last_price)
                             else:
                                 last_price = avg_cost
                                 no_live_price = True

@@ -220,6 +220,8 @@ def compute_portfolio_state(
     realized_pnl_by_symbol: Dict[str, float] = defaultdict(float)
     cash_balance = initial_cash
 
+    is_imported = any(tx.get("metadata", {}).get("synthetic_from_position") for tx in transactions)
+
     for raw_tx in sorted(transactions, key=_transaction_sort_key):
         tx = _coerce_transaction(raw_tx)
         tx_type = tx["transaction_type"]
@@ -241,7 +243,7 @@ def compute_portfolio_state(
             cash_balance -= (gross_amount or fees)
         elif tx_type == "BUY" and symbol:
             total_cost = (quantity * price) + fees
-            if not tx.get("metadata", {}).get("synthetic_from_position"):
+            if not is_imported and not tx.get("metadata", {}).get("synthetic_from_position"):
                 cash_balance -= total_cost
             cost_per_share = safe_div(total_cost, quantity)
             open_lots[symbol].append(
@@ -252,7 +254,8 @@ def compute_portfolio_state(
                 continue
             
             proceeds = (quantity * price) - fees
-            cash_balance += proceeds
+            if not is_imported:
+                cash_balance += proceeds
             
             remaining = quantity
             realized_cost = 0.0
@@ -385,62 +388,52 @@ def build_equity_curve(
             continue
         tx_by_day[tx["executed_at"].date()].append(tx)
 
-    # Check if the portfolio transactions are primarily synthetic (imported broker portfolio)
-    is_synthetic = any(tx.get("metadata", {}).get("synthetic_from_position") for tx in normalized_transactions)
-
     price_frames: Dict[str, pd.Series] = {}
-    
-    if is_synthetic:
-        # Interpolate history smoothly between cost basis (buy price) and today's LTP (live price)
-        total_days = len(all_dates)
-        unique_symbols = list(set(tx.get("symbol") for tx in normalized_transactions if tx.get("symbol")))
-        for symbol in unique_symbols:
-            symbol_txs = [tx for tx in normalized_transactions if tx.get("symbol") == symbol]
-            avg_cost = symbol_txs[0].get("price") or 0.0 if symbol_txs else 0.0
-            
-            live_price = avg_cost
-            if price_map and price_map.get(symbol):
-                live_price = price_map[symbol].last_price
-            
-            prices = []
-            if total_days > 1:
-                for idx in range(total_days):
-                    factor = idx / (total_days - 1)
-                    p = avg_cost + factor * (live_price - avg_cost)
-                    prices.append(p)
-            else:
-                prices = [live_price]
-                
-            price_frames[symbol] = pd.Series(prices, index=all_dates)
-    else:
-        from utils import normalize_history
-        for symbol, series in price_history.items():
-            if series.empty:
-                continue
+    from utils import normalize_history
+
+    unique_symbols = list(set(tx.get("symbol") for tx in normalized_transactions if tx.get("symbol")))
+    for symbol in unique_symbols:
+        series = price_history.get(symbol)
+        
+        # Try to use real historical price series if available
+        if series is not None and not series.empty:
             try:
                 # Flatten multi-index if present
                 if isinstance(series.index, pd.MultiIndex):
                     if 'Date' in series.index.names:
                         series = series.xs(symbol, level=1) if symbol in series.index.get_level_values(1) else series
                 
-                # The series index might contain tuples or unparseable items
-                # Convert series to list of tuples and use our normalizer
                 raw_history = list(zip(series.index, series.values))
                 clean_list = normalize_history(raw_history)
-                
-                if not clean_list:
+                if clean_list:
+                    clean_df = pd.DataFrame(clean_list)
+                    clean_df['date'] = pd.to_datetime(clean_df['date'])
+                    clean_series = clean_df.set_index('date')['nav']
+                    clean_series = clean_series[~clean_series.index.duplicated(keep="last")]
+                    clean_series = clean_series.reindex(all_dates.tz_localize(None)).ffill().bfill()
+                    price_frames[symbol] = clean_series
                     continue
-                    
-                clean_df = pd.DataFrame(clean_list)
-                clean_df['date'] = pd.to_datetime(clean_df['date'])
-                clean_series = clean_df.set_index('date')['nav']
-                
-                clean_series = clean_series[~clean_series.index.duplicated(keep="last")]
-                clean_series = clean_series.reindex(all_dates.tz_localize(None)).ffill()
-                price_frames[symbol] = clean_series
             except Exception as e:
                 print(f"Error normalizing history for {symbol}: {e}")
-                continue
+
+        # Fallback to straight-line interpolation between avg_cost and live_price
+        symbol_txs = [tx for tx in normalized_transactions if tx.get("symbol") == symbol]
+        avg_cost = symbol_txs[0].get("price") or 0.0 if symbol_txs else 0.0
+        live_price = avg_cost
+        if price_map and price_map.get(symbol):
+            live_price = price_map[symbol].last_price
+        
+        total_days = len(all_dates)
+        prices = []
+        if total_days > 1:
+            for idx in range(total_days):
+                factor = idx / (total_days - 1)
+                p = avg_cost + factor * (live_price - avg_cost)
+                prices.append(p)
+        else:
+            prices = [live_price]
+            
+        price_frames[symbol] = pd.Series(prices, index=all_dates)
 
     curve: List[Dict[str, Any]] = []
     prev_nav = 0.0
