@@ -45,15 +45,6 @@ import { sandboxData } from "@/lib/sandboxData"
 
 const PIE_COLORS = ['#8B6F47', '#EDE8DC', '#8C8278', '#D4CEC4', '#2F6B3D', '#FAF7F2', '#EFE8DF']
 
-function formatCurrency(value: number | null | undefined) {
-  if (value === null || value === undefined) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value)
-}
-
 function formatPct(value: number | null | undefined, digits = 2) {
   if (value === null || value === undefined) return "—";
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`
@@ -63,6 +54,16 @@ export default function Dashboard() {
   const router = useRouter()
   const { isSandbox, enterSandbox } = useSandbox()
   const { portfolios, overview: realOverview, loading: realLoading, error: realError } = usePortfolioOverview()
+  const [activeCurrency, setActiveCurrency] = useState("USD")
+
+  const formatCurrency = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return "—";
+    return new Intl.NumberFormat(activeCurrency === "INR" ? "en-IN" : "en-US", {
+      style: "currency",
+      currency: activeCurrency,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
 
   useEffect(() => {
     if (!realLoading && !isSandbox && (!portfolios || portfolios.length === 0)) {
@@ -74,6 +75,24 @@ export default function Dashboard() {
   const overview = isSandbox ? (sandboxData as any) : realOverview
   const loading = isSandbox ? false : realLoading
   const error = isSandbox ? null : realError
+
+  // Dynamically set currency based on active portfolio broker or holdings
+  useEffect(() => {
+    if (!overview) return
+    const broker = overview?.portfolio?.broker?.toLowerCase()
+    const isIndianBroker = broker === "upstox" || broker === "zerodha" || broker === "groww" || broker === "cas_statement"
+    
+    // Fallback: check if any holdings end with .NS or .BO (Indian exchanges)
+    const hasIndianTicker = overview?.positions?.some(
+      (pos: any) => pos.ticker && (pos.ticker.endsWith(".NS") || pos.ticker.endsWith(".BO"))
+    )
+    
+    if (isIndianBroker || hasIndianTicker) {
+      setActiveCurrency("INR")
+    } else {
+      setActiveCurrency("USD")
+    }
+  }, [overview])
 
   const [alertsExpanded, setAlertsExpanded] = useState(false)
   const [isExporting, setIsExporting] = useState(false)

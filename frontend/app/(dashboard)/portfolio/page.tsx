@@ -53,15 +53,6 @@ const PIE_COLORS = ["#A67C52", "#D8CFC5", "#8A847D", "#5E5A56", "#2F6B3D", "#C2B
 const STRATEGIES = ["Equity", "Growth", "Dividend", "Crypto", "Options"]
 
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value || 0)
-}
-
-
 function formatPct(value: number, digits = 2) {
   const normalized = value || 0
   return `${normalized >= 0 ? "+" : ""}${normalized.toFixed(digits)}%`
@@ -90,6 +81,34 @@ export default function PortfolioLab() {
   const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState("manager")
+  const [activeCurrency, setActiveCurrency] = useState("USD")
+
+  const formatCurrency = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return "—";
+    return new Intl.NumberFormat(activeCurrency === "INR" ? "en-IN" : "en-US", {
+      style: "currency",
+      currency: activeCurrency,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
+
+  // Dynamically set currency based on active portfolio broker or holdings
+  useEffect(() => {
+    if (!overview) return
+    const broker = overview?.portfolio?.broker?.toLowerCase()
+    const isIndianBroker = broker === "upstox" || broker === "zerodha" || broker === "groww" || broker === "cas_statement"
+    
+    // Fallback: check if any holdings end with .NS or .BO (Indian exchanges)
+    const hasIndianTicker = overview?.positions?.some(
+      (pos: any) => pos.ticker && (pos.ticker.endsWith(".NS") || pos.ticker.endsWith(".BO"))
+    )
+    
+    if (isIndianBroker || hasIndianTicker) {
+      setActiveCurrency("INR")
+    } else {
+      setActiveCurrency("USD")
+    }
+  }, [overview])
   
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false)
