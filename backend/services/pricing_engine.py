@@ -336,6 +336,11 @@ async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_T
         if is_upstox or (_utcnow() - cached.fetched_at).total_seconds() <= max_age_seconds:
             return cached
 
+    # If it is a government security/bond and we couldn't get a fresh quote from cache/Upstox, do NOT query yfinance!
+    is_gsec = "GS" in symbol or "GB" in symbol or symbol.startswith("709GS")
+    if is_gsec:
+        return cached
+
     try:
         fresh = await _fetch_quote_multi_source(symbol)
         if fresh:
@@ -424,7 +429,18 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                 print(f"Error in batch Upstox Quotes API fetch: {e}")
 
     # Re-evaluate missing symbols for yfinance fallback
-    still_missing = [s for s in missing if s not in mapping]
+    # Filter out G-Secs (government bonds) from yfinance download list to prevent delisting/timezone errors
+    still_missing = [
+        s for s in missing 
+        if s not in mapping and not ("GS" in s or "GB" in s or s.startswith("709GS"))
+    ]
+    
+    # If a G-Sec is still missing from the mapping, make sure it falls back to cache
+    for s in missing:
+        if s not in mapping and ("GS" in s or "GB" in s or s.startswith("709GS")):
+            if s in all_cached:
+                mapping[s] = all_cached[s]
+
     if not still_missing:
         return mapping
 
