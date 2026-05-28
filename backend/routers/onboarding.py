@@ -603,7 +603,7 @@ async def upstox_login(current_user = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Upstox client ID not configured on server.")
         
     encoded_redirect = urllib.parse.quote(redirect_uri)
-    auth_url = f"https://api.upstox.com/v2/oauth/authorize?client_id={client_id}&redirect_uri={encoded_redirect}&response_type=code"
+    auth_url = f"https://api.upstox.com/v2/login/authorization/dialog?client_id={client_id}&redirect_uri={encoded_redirect}&response_type=code"
     return {"auth_url": auth_url}
 
 @router.get("/upstox-callback")
@@ -623,7 +623,7 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
         if not client_id or not client_secret:
             raise HTTPException(status_code=500, detail="Upstox credentials not configured on server.")
             
-        token_url = "https://api.upstox.com/v2/oauth/token"
+        token_url = "https://api.upstox.com/v2/login/authorization/token"
         payload = {
             "code": code,
             "client_id": client_id,
