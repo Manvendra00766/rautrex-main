@@ -553,6 +553,7 @@ async def sync_portfolio_positions_snapshot(portfolio_id: str, positions: List[D
                 "ticker": position["ticker"],
                 "shares": position["shares"],
                 "avg_cost_price": position["avg_cost_per_share"],
+                "exchange": "NSE" if position["ticker"].endswith(".NS") or position["ticker"].endswith(".BO") else "NASDAQ"
             }
             for position in positions
         ]
@@ -812,10 +813,12 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
             "id": portfolio["id"],
             "name": portfolio["name"],
             "description": portfolio.get("description"),
-            "base_currency": portfolio.get("currency") or portfolio.get("base_currency") or "USD",
+            "currency": portfolio.get("base_currency") or "USD",
+            "base_currency": portfolio.get("base_currency") or "USD",
             "benchmark_symbol": portfolio.get("benchmark_symbol") or "SPY",
             "is_default": portfolio.get("is_default", False),
             "margin_enabled": portfolio.get("margin_enabled", False),
+            "broker": "upstox" if "upstox" in (portfolio.get("name") or "").lower() or "upstox" in (portfolio.get("description") or "").lower() else ("zerodha" if "zerodha" in (portfolio.get("name") or "").lower() else ("groww" if "groww" in (portfolio.get("name") or "").lower() else "broker")),
         },
         "summary": summary,
         "equity_curve": equity_curve,

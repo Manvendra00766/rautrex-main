@@ -32,7 +32,7 @@ async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", ca
         "cash_balance": cash_balance,
         "initial_cash": cash_balance,
         "is_default": is_default,
-        "currency": currency,
+        "base_currency": currency,
     }).execute()
     
     if res.data:
@@ -290,7 +290,9 @@ async def save_imported_portfolio(user_id: str, broker: str, holdings: list, ana
         profile_res = await get_profile(user_id)
         preferences = {}
         if profile_res.data:
-            preferences = profile_res.data[0].get("preferences") or {}
+            profile_data = profile_res.data
+            profile = profile_data[0] if isinstance(profile_data, list) else profile_data
+            preferences = profile.get("preferences") or {}
         
         preferences["imported_portfolio"] = {
             "broker": broker,
@@ -312,17 +314,23 @@ async def save_imported_portfolio(user_id: str, broker: str, holdings: list, ana
         
         if existing.data:
             portfolio_id = existing.data[0]["id"]
-            # Clear old positions
+            # Clear old positions and transactions
             try:
                 supabase.table("portfolio_positions").delete().eq("portfolio_id", portfolio_id).execute()
             except Exception as del_err:
                 print(f"Failed to clear old positions: {del_err}")
                 
-            # Update cash balance, description and currency
+            try:
+                supabase.table("transactions").delete().eq("portfolio_id", portfolio_id).execute()
+            except Exception as del_tx_err:
+                print(f"Failed to clear old transactions: {del_tx_err}")
+                
+            # Update cash balance, initial_cash, description and base_currency
             supabase.table("portfolios").update({
                 "cash_balance": float(analysis.get("cash_balance") or 0.0),
+                "initial_cash": float(analysis.get("cash_balance") or 0.0),
                 "description": f"Imported portfolio from {broker.capitalize()}.",
-                "currency": currency
+                "base_currency": currency
             }).eq("id", portfolio_id).execute()
         else:
             res = await create_portfolio(
