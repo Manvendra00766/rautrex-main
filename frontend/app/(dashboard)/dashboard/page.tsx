@@ -356,7 +356,7 @@ export default function Dashboard() {
           />
           <MetricCard 
             label="Cash Balance" 
-            value={formatCurrency(summary.cash)} 
+            value={summary.cash === null || summary.cash === undefined ? "N/A" : formatCurrency(summary.cash)} 
             subtext="Liquid capital"
           />
         </div>
@@ -366,7 +366,7 @@ export default function Dashboard() {
       <CardSurface className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Gross Exposure" value={formatCurrency(summary.gross_exposure)} change={formatPct(summary.gross_exposure_pct)} trend={summary.gross_exposure_pct >= 0 ? "up" : "down"} subtext={exposureEqualNote} />
         <MetricCard label="Net Exposure" value={formatCurrency(summary.net_exposure)} change={exposureIsEqual ? undefined : formatPct(summary.net_exposure_pct)} trend={summary.net_exposure_pct >= 0 ? "up" : "down"} subtext={exposureEqualNote} />
-        <MetricCard label="Value at Risk (95%)" value={summary.var_95 !== null && summary.var_95 !== undefined ? formatPct(summary.var_95 * 100) : "—"} subtext="Max daily potential loss" />
+        <MetricCard label="Value at Risk (95%)" value={summary.var_95 !== null && summary.var_95 !== undefined ? (Math.abs(summary.var_95 * 100) > 100 ? "Insufficient data for accurate VaR" : formatPct(summary.var_95 * 100)) : "—"} subtext="Max daily potential loss" />
         <MetricCard label="Sharpe Ratio" value={summary.sharpe_ratio !== null && summary.sharpe_ratio !== undefined ? summary.sharpe_ratio.toFixed(2) : "—"} subtext={summary.sharpe_ratio === null || summary.sharpe_ratio === undefined || (summary.sharpe_ratio === 0 && (equity_curve || []).length < 20) ? "Insufficient history (need 20+ days)" : "Risk-adjusted return"} />
       </CardSurface>
 
@@ -504,7 +504,14 @@ export default function Dashboard() {
                 </TableCell>
                 <TableCell className="text-right text-text-secondary">{position.shares.toFixed(4).replace(/\.?0+$/, "")}</TableCell>
                 <TableCell className="text-right text-text-muted">{formatCurrency(position.avg_cost_per_share)}</TableCell>
-                <TableCell className="text-right text-text-primary">{formatCurrency(position.live_price)}</TableCell>
+                <TableCell className="text-right text-text-primary">
+                  <div className="flex flex-col items-end">
+                    <span>{formatCurrency(position.live_price)}</span>
+                    {position.no_live_price && (
+                      <span className="text-[8px] text-text-muted font-normal lowercase bg-surface border border-border px-1 rounded select-none">no live price</span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right text-text-primary">{formatCurrency(position.market_value)}</TableCell>
                 <TableCell className={cn("text-right font-medium", position.unrealized_pnl >= 0 ? "text-positive" : "text-negative")}>
                   {formatCurrency(position.unrealized_pnl)}

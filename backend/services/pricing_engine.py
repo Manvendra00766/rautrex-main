@@ -270,14 +270,17 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
 
     # 1. Try to get all from cache
     mapping: Dict[str, PriceSnapshot] = {}
+    all_cached: Dict[str, PriceSnapshot] = {}
     try:
         response = supabase.table("market_cache").select("*").in_("symbol", unique_symbols).execute()
         cached_rows = response.data or []
         now = _utcnow()
         for row in cached_rows:
             snap = _parse_cached_snapshot(row)
-            if snap and (now - snap.fetched_at).total_seconds() <= max_age_seconds:
-                mapping[snap.symbol] = snap
+            if snap:
+                all_cached[snap.symbol] = snap
+                if (now - snap.fetched_at).total_seconds() <= max_age_seconds:
+                    mapping[snap.symbol] = snap
     except Exception as e:
         print(f"Error reading batch cache: {e}")
 
@@ -296,6 +299,9 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
         )
         
         if raw.empty:
+            for symbol in missing:
+                if symbol in all_cached:
+                    mapping[symbol] = all_cached[symbol]
             return mapping
 
         now = _utcnow()
@@ -305,11 +311,16 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                     ticker_df = raw
                 else:
                     if symbol not in raw.columns.levels[0]:
+                        # Fall back to stale cached snapshot if yfinance download has no data for this ticker
+                        if symbol in all_cached:
+                            mapping[symbol] = all_cached[symbol]
                         continue
                     ticker_df = raw[symbol]
                 
                 closes = ticker_df["Close"].dropna()
                 if closes.empty:
+                    if symbol in all_cached:
+                        mapping[symbol] = all_cached[symbol]
                     continue
 
                 last_price = float(closes.iloc[-1])
@@ -321,7 +332,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                 
                 # For batch download, we don't get full info (sector, etc.) 
                 # We try to keep existing metadata from cache if available
-                existing = mapping.get(symbol)
+                existing = all_cached.get(symbol) or mapping.get(symbol)
                 
                 new_snap = PriceSnapshot(
                     symbol=symbol,
@@ -346,9 +357,15 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                 asyncio.create_task(upsert_cached_price(new_snap))
             except Exception as e:
                 print(f"Error processing batch result for {symbol}: {e}")
+                if symbol in all_cached:
+                    mapping[symbol] = all_cached[symbol]
                 continue
     except Exception as e:
         print(f"Batch download failed: {e}")
+        # On global failure, fall back to whatever cache we have for missing symbols
+        for symbol in missing:
+            if symbol not in mapping and symbol in all_cached:
+                mapping[symbol] = all_cached[symbol]
 
     return mapping
 

@@ -44,7 +44,13 @@ class PortfolioCalculationService:
             float(p.get("shares", 0)) * float(p.get("live_price", p.get("price", 0)))
             for p in positions
         )
-        return float(cash) + total_market_value
+        try:
+            cash_val = float(cash) if cash is not None else 0.0
+            if math.isnan(cash_val) or math.isinf(cash_val):
+                cash_val = 0.0
+        except (ValueError, TypeError):
+            cash_val = 0.0
+        return cash_val + total_market_value
 
     @classmethod
     def calculate_weights(cls, positions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -244,7 +244,7 @@ export default function RiskPage() {
                 />
                 <MetricCard 
                   title="95% Daily VaR" 
-                  value={`${((results.metrics?.var_95 || 0) * 100).toFixed(2)}%`} 
+                  value={Math.abs((results.metrics?.var_95 || 0) * 100) > 100 ? "Insufficient data for accurate VaR" : `${((results.metrics?.var_95 || 0) * 100).toFixed(2)}%`} 
                   icon={<ShieldAlert className="text-orange-500" />} 
                   subtext="Probable Tail Risk"
                   trend="neutral"

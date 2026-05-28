@@ -87,14 +87,8 @@ def _synthesize_transactions(
 ) -> List[Dict[str, Any]]:
     synthetic: List[Dict[str, Any]] = []
     
-    # Calculate target synthetic execution time:
-    # If portfolio_created_at is provided, use it.
-    # Otherwise, default to 30 days ago.
-    if portfolio_created_at:
-        target_date = portfolio_created_at
-    else:
-        target_date = _utcnow() - timedelta(days=30)
-    
+    # ALWAYS default to 30 days ago for imported/synthetic portfolios to guarantee a rich 30-day historical baseline
+    target_date = _utcnow() - timedelta(days=30)
     target_date_str = target_date.isoformat()
 
     for row in position_rows:
@@ -599,6 +593,12 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         symbol = pos["ticker"]
         quote = price_map.get(symbol)
         
+        # Check if live price is unavailable/fallback
+        is_fallback = False
+        if not quote or quote.source == "stale" or (quote.last_price == pos.get("avg_cost_per_share") and symbol.endswith(".NS") and ("GS" in symbol or "GB" in symbol or "709GS" in symbol)):
+            is_fallback = True
+        pos["no_live_price"] = is_fallback
+        
         # 1. market_cap
         mcap = quote.market_cap if (quote and quote.market_cap is not None) else None
         pos["market_cap"] = mcap
@@ -731,9 +731,10 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
                 "current_value": weight
             })
     # Negative cash balance warning
-    if state["cash_balance"] < 0.0:
+    if state["cash_balance"] is not None and state["cash_balance"] < 0.0:
         p_currency = portfolio.get("currency") or portfolio.get("base_currency") or "USD"
-        curr_symbol = "₹" if p_currency == "INR" else "$"
+        is_inr = p_currency == "INR" or any(b in (portfolio.get("name") or "").lower() for b in ["upstox", "zerodha", "groww"])
+        curr_symbol = "₹" if is_inr else "$"
         alerts.append({
             "id": "neg_cash",
             "type": "risk_breach",

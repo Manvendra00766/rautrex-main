@@ -33,8 +33,8 @@ class BackgroundWorker:
         self.scheduler.add_job(
             self.safe_job(self.sync_all_broker_portfolios), 
             'cron', 
-            hour=18, 
-            minute=0, 
+            hour=15, 
+            minute=30, 
             timezone='Asia/Kolkata',
             id='sync_broker_portfolios', 
             replace_existing=True
@@ -111,8 +111,9 @@ class BackgroundWorker:
                         }
                         
                         # 1. Fetch available margin
+                        cash_balance = None
                         try:
-                            funds_url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+                            funds_url = "https://api.upstox.com/v2/user/fund-margin"
                             funds_res = requests.get(funds_url, headers=headers, timeout=10)
                             if funds_res.status_code == 200:
                                 funds_data = funds_res.json().get("data") or {}
@@ -125,6 +126,7 @@ class BackgroundWorker:
                         response = requests.get(url, headers=headers, timeout=10)
                         
                         if response.status_code == 200:
+                            from datetime import datetime, timezone
                             data = response.json()
                             upstox_holdings = data.get("data") or []
                             
@@ -132,13 +134,74 @@ class BackgroundWorker:
                                 ticker = f"{h.get('tradingsymbol')}.NS"
                                 shares = float(h.get("quantity") or 0.0)
                                 avg_cost = float(h.get("average_price") or 0.0)
-                                current_price = float(h.get("last_price") or avg_cost)
+                                
+                                exch = h.get("exchange") or h.get("exchange_segment") or ""
+                                inst_type = h.get("instrument_type") or ""
+                                no_live_price = False
+                                
+                                close_price = float(h.get("close_price") or 0.0)
+                                last_price = float(h.get("last_price") or avg_cost)
+                                
+                                if inst_type == "GB" or exch == "NSE_GS":
+                                    instrument_key = f"NSE_GS:{h.get('tradingsymbol')}"
+                                    try:
+                                        quote_url = "https://api.upstox.com/v2/market-quote/quotes"
+                                        quote_res = requests.get(
+                                            quote_url,
+                                            headers=headers,
+                                            params={"instrument_key": instrument_key},
+                                            timeout=10
+                                        )
+                                        if quote_res.status_code == 200:
+                                            quote_data = quote_res.json().get("data", {}).get(instrument_key) or {}
+                                            if quote_data:
+                                                last_price = float(quote_data.get("last_price") or last_price)
+                                                close_price = float(quote_data.get("close") or close_price or last_price)
+                                            else:
+                                                last_price = avg_cost
+                                                no_live_price = True
+                                        else:
+                                            last_price = avg_cost
+                                            no_live_price = True
+                                    except Exception as quote_err:
+                                        logger.error(f"Failed to fetch Upstox quote in scheduler for {instrument_key}: {quote_err}")
+                                        last_price = avg_cost
+                                        no_live_price = True
+                                
+                                current_price = last_price
+                                if close_price <= 0:
+                                    close_price = current_price
+                                
+                                # Cache the quote directly to market_cache
+                                try:
+                                    change_amount = current_price - close_price
+                                    change_percent = (change_amount / close_price * 100.0) if close_price > 0 else 0.0
+                                    supabase.table("market_cache").upsert({
+                                        "symbol": ticker,
+                                        "name": h.get("company_name") or ticker,
+                                        "asset_type": "equity",
+                                        "currency": "INR",
+                                        "exchange": exch or "NSE",
+                                        "sector": "Government Securities" if (inst_type == "GB" or exch == "NSE_GS") else ("Banking/Financial Services" if "BANK" in ticker else "Technology" if "TCS" in ticker or "INFY" in ticker else "Energy/Conglomerate"),
+                                        "country": "IN",
+                                        "market_cap": None,
+                                        "previous_close": close_price,
+                                        "last_price": current_price,
+                                        "change_amount": change_amount,
+                                        "change_percent": change_percent,
+                                        "volume": None,
+                                        "source": "upstox_quote" if (inst_type == "GB" or exch == "NSE_GS") else "upstox_sync",
+                                        "fetched_at": datetime.now(tz=timezone.utc).isoformat(),
+                                        "raw": h
+                                    }).execute()
+                                except Exception as cache_err:
+                                    logger.error(f"Failed to cache Upstox price in scheduler for {ticker}: {cache_err}")
                                 
                                 holdings.append({
                                     "ticker": ticker,
                                     "name": h.get("company_name") or ticker,
                                     "asset_type": "equity",
-                                    "sector": "Banking/Financial Services" if "BANK" in ticker else "Technology" if "TCS" in ticker or "INFY" in ticker else "Energy/Conglomerate",
+                                    "sector": "Government Securities" if (inst_type == "GB" or exch == "NSE_GS") else ("Banking/Financial Services" if "BANK" in ticker else "Technology" if "TCS" in ticker or "INFY" in ticker else "Energy/Conglomerate"),
                                     "market_cap_type": "large",
                                     "shares": shares,
                                     "avg_cost": avg_cost,
@@ -148,7 +211,8 @@ class BackgroundWorker:
                                     "pnl": shares * (current_price - avg_cost),
                                     "pnl_pct": ((current_price - avg_cost) / avg_cost * 100.0) if avg_cost > 0 else 0.0,
                                     "expense_ratio": 0.0,
-                                    "category": ""
+                                    "category": "",
+                                    "no_live_price": no_live_price
                                 })
                         elif response.status_code == 401:
                             logger.warning(f"Upstox token expired for user {user_id}. Attempting token refresh...")

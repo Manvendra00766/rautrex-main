@@ -475,7 +475,7 @@ export default function PortfolioLab() {
                 />
                 <MetricCard 
                   title="Cash Balance" 
-                  value={formatCurrency(summary.cash)} 
+                  value={summary.cash === null || summary.cash === undefined ? "N/A" : formatCurrency(summary.cash)} 
                   icon={<DollarSign className="text-accent-teal" />} 
                 />
                 <MetricCard 
@@ -617,7 +617,14 @@ export default function PortfolioLab() {
                             </td>
                             <td className="px-3 py-4 text-right text-text-secondary">{position.shares.toFixed(4).replace(/\.?0+$/, "")}</td>
                             <td className="px-3 py-4 text-right text-text-secondary">{formatCurrency(position.avg_cost_per_share)}</td>
-                            <td className="px-3 py-4 text-right text-text-primary">{formatCurrency(position.live_price)}</td>
+                            <td className="px-3 py-4 text-right text-text-primary">
+                              <div className="flex flex-col items-end">
+                                <span>{formatCurrency(position.live_price)}</span>
+                                {position.no_live_price && (
+                                  <span className="text-[8px] text-text-muted font-normal lowercase bg-surface border border-border px-1 rounded select-none">no live price</span>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-3 py-4 text-right text-text-primary">{formatCurrency(position.market_value)}</td>
                             <td className={cn("px-3 py-4 text-right font-bold", position.unrealized_pnl >= 0 ? "text-positive" : "text-negative")}>{formatCurrency(position.unrealized_pnl)}</td>
                             <td className={cn("px-3 py-4 text-right font-bold", position.daily_pnl >= 0 ? "text-positive" : "text-negative")}>{formatCurrency(position.daily_pnl)}</td>

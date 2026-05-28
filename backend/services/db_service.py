@@ -363,6 +363,22 @@ async def save_imported_portfolio(user_id: str, broker: str, holdings: list, ana
         
         if positions_to_insert:
             supabase.table("portfolio_positions").insert(positions_to_insert).execute()
+            
+        # Record today's calculated NAV snapshot in historical_equity
+        try:
+            today = datetime.now(tz=timezone.utc).date().isoformat()
+            nav_val = float(analysis.get("cash_balance") or 0.0) + float(analysis.get("current_value") or 0.0)
+            supabase.table("historical_equity").upsert({
+                "user_id": user_id,
+                "portfolio_id": portfolio_id,
+                "snapshot_date": today,
+                "nav": nav_val,
+                "cash_balance": float(analysis.get("cash_balance") or 0.0),
+                "market_value": float(analysis.get("current_value") or 0.0),
+                "daily_pnl": float(analysis.get("pnl") or 0.0),
+            }).execute()
+        except Exception as hist_err:
+            print(f"Failed to record daily historical equity snapshot: {hist_err}")
     except Exception as e:
         print(f"Failed to save standard portfolio for imported broker: {e}")
 
