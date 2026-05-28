@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Activity,
   AlertTriangle,
@@ -59,8 +60,16 @@ function formatPct(value: number | null | undefined, digits = 2) {
 }
 
 export default function Dashboard() {
+  const router = useRouter()
   const { isSandbox, enterSandbox } = useSandbox()
-  const { overview: realOverview, loading: realLoading, error: realError } = usePortfolioOverview()
+  const { portfolios, overview: realOverview, loading: realLoading, error: realError } = usePortfolioOverview()
+
+  useEffect(() => {
+    if (!realLoading && !isSandbox && (!portfolios || portfolios.length === 0)) {
+      router.push("/onboarding")
+    }
+  }, [realLoading, isSandbox, portfolios, router])
+
 
   const overview = isSandbox ? (sandboxData as any) : realOverview
   const loading = isSandbox ? false : realLoading
