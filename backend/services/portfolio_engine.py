@@ -343,6 +343,7 @@ def build_equity_curve(
     end_date: date,
     initial_cash: float = 0.0,
     portfolio_created_at: Optional[date] = None,
+    price_map: Optional[Dict[str, PriceSnapshot]] = None,
 ) -> List[Dict[str, Any]]:
     # FIXED: Build equity curve with baseline if portfolio was created today to guarantee 2-point flat line
     if not transactions:
@@ -384,35 +385,62 @@ def build_equity_curve(
             continue
         tx_by_day[tx["executed_at"].date()].append(tx)
 
+    # Check if the portfolio transactions are primarily synthetic (imported broker portfolio)
+    is_synthetic = any(tx.get("metadata", {}).get("synthetic_from_position") for tx in normalized_transactions)
+
     price_frames: Dict[str, pd.Series] = {}
-    from utils import normalize_history
-    for symbol, series in price_history.items():
-        if series.empty:
-            continue
-        try:
-            # Flatten multi-index if present
-            if isinstance(series.index, pd.MultiIndex):
-                if 'Date' in series.index.names:
-                    series = series.xs(symbol, level=1) if symbol in series.index.get_level_values(1) else series
+    
+    if is_synthetic:
+        # Interpolate history smoothly between cost basis (buy price) and today's LTP (live price)
+        total_days = len(all_dates)
+        unique_symbols = list(set(tx.get("symbol") for tx in normalized_transactions if tx.get("symbol")))
+        for symbol in unique_symbols:
+            symbol_txs = [tx for tx in normalized_transactions if tx.get("symbol") == symbol]
+            avg_cost = symbol_txs[0].get("price") or 0.0 if symbol_txs else 0.0
             
-            # The series index might contain tuples or unparseable items
-            # Convert series to list of tuples and use our normalizer
-            raw_history = list(zip(series.index, series.values))
-            clean_list = normalize_history(raw_history)
+            live_price = avg_cost
+            if price_map and price_map.get(symbol):
+                live_price = price_map[symbol].last_price
             
-            if not clean_list:
-                continue
+            prices = []
+            if total_days > 1:
+                for idx in range(total_days):
+                    factor = idx / (total_days - 1)
+                    p = avg_cost + factor * (live_price - avg_cost)
+                    prices.append(p)
+            else:
+                prices = [live_price]
                 
-            clean_df = pd.DataFrame(clean_list)
-            clean_df['date'] = pd.to_datetime(clean_df['date'])
-            clean_series = clean_df.set_index('date')['nav']
-            
-            clean_series = clean_series[~clean_series.index.duplicated(keep="last")]
-            clean_series = clean_series.reindex(all_dates.tz_localize(None)).ffill()
-            price_frames[symbol] = clean_series
-        except Exception as e:
-            print(f"Error normalizing history for {symbol}: {e}")
-            continue
+            price_frames[symbol] = pd.Series(prices, index=all_dates)
+    else:
+        from utils import normalize_history
+        for symbol, series in price_history.items():
+            if series.empty:
+                continue
+            try:
+                # Flatten multi-index if present
+                if isinstance(series.index, pd.MultiIndex):
+                    if 'Date' in series.index.names:
+                        series = series.xs(symbol, level=1) if symbol in series.index.get_level_values(1) else series
+                
+                # The series index might contain tuples or unparseable items
+                # Convert series to list of tuples and use our normalizer
+                raw_history = list(zip(series.index, series.values))
+                clean_list = normalize_history(raw_history)
+                
+                if not clean_list:
+                    continue
+                    
+                clean_df = pd.DataFrame(clean_list)
+                clean_df['date'] = pd.to_datetime(clean_df['date'])
+                clean_series = clean_df.set_index('date')['nav']
+                
+                clean_series = clean_series[~clean_series.index.duplicated(keep="last")]
+                clean_series = clean_series.reindex(all_dates.tz_localize(None)).ffill()
+                price_frames[symbol] = clean_series
+            except Exception as e:
+                print(f"Error normalizing history for {symbol}: {e}")
+                continue
 
     curve: List[Dict[str, Any]] = []
     prev_nav = 0.0
@@ -655,7 +683,8 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         price_history, 
         history_end, 
         initial_cash=initial_cash,
-        portfolio_created_at=portfolio_created_at
+        portfolio_created_at=portfolio_created_at,
+        price_map=price_map
     )
     await persist_historical_equity(user_id, portfolio_id, equity_curve)
     await sync_portfolio_positions_snapshot(portfolio_id, state["positions"])

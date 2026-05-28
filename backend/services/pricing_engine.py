@@ -248,8 +248,10 @@ def _fetch_quote_sync(symbol: str) -> Optional[PriceSnapshot]:
 async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_TTL_SECONDS) -> Optional[PriceSnapshot]:
     symbol = normalize_symbol(symbol)
     cached = await get_cached_price(symbol)
-    if cached and (_utcnow() - cached.fetched_at).total_seconds() <= max_age_seconds:
-        return cached
+    if cached:
+        is_upstox = cached.source in ["upstox_quote", "upstox_sync"] or "GS" in cached.symbol or "GB" in cached.symbol
+        if is_upstox or (_utcnow() - cached.fetched_at).total_seconds() <= max_age_seconds:
+            return cached
 
     loop = asyncio.get_event_loop()
     try:
@@ -279,7 +281,8 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
             snap = _parse_cached_snapshot(row)
             if snap:
                 all_cached[snap.symbol] = snap
-                if (now - snap.fetched_at).total_seconds() <= max_age_seconds:
+                is_upstox = snap.source in ["upstox_quote", "upstox_sync"] or "GS" in snap.symbol or "GB" in snap.symbol
+                if is_upstox or (now - snap.fetched_at).total_seconds() <= max_age_seconds:
                     mapping[snap.symbol] = snap
     except Exception as e:
         print(f"Error reading batch cache: {e}")
