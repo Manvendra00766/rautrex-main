@@ -245,17 +245,99 @@ def _fetch_quote_sync(symbol: str) -> Optional[PriceSnapshot]:
     )
 
 
+async def get_active_upstox_token() -> Optional[str]:
+    try:
+        response = supabase.table("profiles").select("broker_oauth").not_.is_("broker_oauth", "null").execute()
+        if response.data:
+            for row in response.data:
+                oauth = row.get("broker_oauth") or {}
+                token = oauth.get("access_token")
+                if token:
+                    return token
+    except Exception as e:
+        print(f"Error fetching active Upstox token: {e}")
+    return None
+
+
+def to_upstox_instrument_key(symbol: str) -> str:
+    clean = symbol.strip().upper()
+    if clean.endswith(".NS"):
+        ticker = clean[:-3]
+        if "GS" in ticker or "GB" in ticker or ticker.startswith("709GS"):
+            return f"NSE_GS:{ticker}"
+        return f"NSE_EQ:{ticker}"
+    elif clean.endswith(".BO"):
+        return f"BSE_EQ:{clean[:-3]}"
+    return f"NSE_EQ:{clean}"
+
+
+async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
+    symbol_upper = symbol.upper()
+    is_indian = symbol_upper.endswith(".NS") or symbol_upper.endswith(".BO") or "GS" in symbol_upper or "GB" in symbol_upper
+    
+    if is_indian:
+        token = await get_active_upstox_token()
+        if token:
+            try:
+                import requests
+                instrument_key = to_upstox_instrument_key(symbol)
+                url = "https://api.upstox.com/v2/market-quote/quotes"
+                params = {"instrument_key": instrument_key}
+                headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+                
+                loop = asyncio.get_event_loop()
+                res = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, params=params, timeout=5))
+                if res.status_code == 200:
+                    quote_data = res.json().get("data", {}).get(instrument_key)
+                    if quote_data:
+                        last_price = float(quote_data.get("last_price") or 0.0)
+                        close_price = float(quote_data.get("close") or last_price)
+                        change_amount = last_price - close_price
+                        change_percent = (change_amount / close_price * 100.0) if close_price > 0 else 0.0
+                        
+                        return PriceSnapshot(
+                            symbol=symbol,
+                            name=quote_data.get("symbol") or symbol,
+                            asset_type="equity",
+                            currency="INR",
+                            exchange=instrument_key.split(":")[0],
+                            sector="Government Securities" if "GS" in instrument_key or "GB" in instrument_key else "Indian Equity",
+                            country="IN",
+                            market_cap=None,
+                            previous_close=close_price,
+                            last_price=last_price,
+                            change_amount=change_amount,
+                            change_percent=change_percent,
+                            volume=int(quote_data.get("volume") or 0) if quote_data.get("volume") else None,
+                            source="upstox_quotes_api",
+                            fetched_at=_utcnow(),
+                            raw=quote_data
+                        )
+            except Exception as e:
+                print(f"Error fetching from Upstox API for {symbol}: {e}")
+                
+    # Fallback to yfinance
+    loop = asyncio.get_event_loop()
+    try:
+        fresh = await loop.run_in_executor(None, _fetch_quote_sync, symbol)
+        if fresh:
+            return fresh
+    except Exception:
+        pass
+        
+    return None
+
+
 async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_TTL_SECONDS) -> Optional[PriceSnapshot]:
     symbol = normalize_symbol(symbol)
     cached = await get_cached_price(symbol)
     if cached:
-        is_upstox = cached.source in ["upstox_quote", "upstox_sync"] or "GS" in cached.symbol or "GB" in cached.symbol
+        is_upstox = cached.source in ["upstox_quote", "upstox_sync", "upstox_quotes_api", "upstox_quotes_api_batch"] or "GS" in cached.symbol or "GB" in cached.symbol
         if is_upstox or (_utcnow() - cached.fetched_at).total_seconds() <= max_age_seconds:
             return cached
 
-    loop = asyncio.get_event_loop()
     try:
-        fresh = await loop.run_in_executor(None, _fetch_quote_sync, symbol)
+        fresh = await _fetch_quote_multi_source(symbol)
         if fresh:
             await upsert_cached_price(fresh)
             return fresh
@@ -281,7 +363,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
             snap = _parse_cached_snapshot(row)
             if snap:
                 all_cached[snap.symbol] = snap
-                is_upstox = snap.source in ["upstox_quote", "upstox_sync"] or "GS" in snap.symbol or "GB" in snap.symbol
+                is_upstox = snap.source in ["upstox_quote", "upstox_sync", "upstox_quotes_api", "upstox_quotes_api_batch"] or "GS" in snap.symbol or "GB" in snap.symbol
                 if is_upstox or (now - snap.fetched_at).total_seconds() <= max_age_seconds:
                     mapping[snap.symbol] = snap
     except Exception as e:
@@ -292,29 +374,81 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
     if not missing:
         return mapping
 
-    # 3. Batch download missing symbols
+    # Multi-source routing for Indian assets
+    indian_missing = [s for s in missing if s.endswith(".NS") or s.endswith(".BO") or "GS" in s or "GB" in s]
+    if indian_missing:
+        token = await get_active_upstox_token()
+        if token:
+            try:
+                import requests
+                keys_map = {to_upstox_instrument_key(s): s for s in indian_missing}
+                instrument_keys = ",".join(keys_map.keys())
+                url = "https://api.upstox.com/v2/market-quote/quotes"
+                params = {"instrument_key": instrument_keys}
+                headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
+                
+                loop = asyncio.get_event_loop()
+                res = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, params=params, timeout=5))
+                if res.status_code == 200:
+                    data = res.json().get("data") or {}
+                    now = _utcnow()
+                    for inst_key, q_data in data.items():
+                        symbol = keys_map.get(inst_key)
+                        if symbol and q_data:
+                            last_price = float(q_data.get("last_price") or 0.0)
+                            close_price = float(q_data.get("close") or last_price)
+                            change_amount = last_price - close_price
+                            change_percent = (change_amount / close_price * 100.0) if close_price > 0 else 0.0
+                            
+                            snap = PriceSnapshot(
+                                symbol=symbol,
+                                name=q_data.get("symbol") or symbol,
+                                asset_type="equity",
+                                currency="INR",
+                                exchange=inst_key.split(":")[0],
+                                sector="Government Securities" if "GS" in inst_key or "GB" in inst_key else "Indian Equity",
+                                country="IN",
+                                market_cap=None,
+                                previous_close=close_price,
+                                last_price=last_price,
+                                change_amount=change_amount,
+                                change_percent=change_percent,
+                                volume=int(q_data.get("volume") or 0) if q_data.get("volume") else None,
+                                source="upstox_quotes_api_batch",
+                                fetched_at=now,
+                                raw=q_data
+                            )
+                            mapping[symbol] = snap
+                            asyncio.create_task(upsert_cached_price(snap))
+            except Exception as e:
+                print(f"Error in batch Upstox Quotes API fetch: {e}")
+
+    # Re-evaluate missing symbols for yfinance fallback
+    still_missing = [s for s in missing if s not in mapping]
+    if not still_missing:
+        return mapping
+
+    # 3. Batch download remaining missing symbols via yfinance
     loop = asyncio.get_event_loop()
     try:
-        # Fetch 5 days to ensure we have previous close
         raw = await loop.run_in_executor(
             None, 
-            lambda: yf.download(missing, period="5d", interval="1d", progress=False, auto_adjust=False, group_by="ticker")
+            lambda: yf.download(still_missing, period="5d", interval="1d", progress=False, auto_adjust=False, group_by="ticker")
         )
         
         if raw.empty:
-            for symbol in missing:
+            for symbol in still_missing:
                 if symbol in all_cached:
                     mapping[symbol] = all_cached[symbol]
             return mapping
 
         now = _utcnow()
-        for symbol in missing:
+        for symbol in still_missing:
             try:
-                if len(missing) == 1:
+                if len(still_missing) == 1:
                     ticker_df = raw
                 else:
                     if symbol not in raw.columns.levels[0]:
-                        # Fall back to stale cached snapshot if yfinance download has no data for this ticker
                         if symbol in all_cached:
                             mapping[symbol] = all_cached[symbol]
                         continue
@@ -327,14 +461,11 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                     continue
 
                 last_price = float(closes.iloc[-1])
-                # Try to get previous close from history, fallback to last_price
                 prev_close = float(closes.iloc[-2]) if len(closes) > 1 else last_price
                 
                 change_amount = last_price - prev_close
                 change_percent = (change_amount / prev_close) * 100 if prev_close else 0.0
                 
-                # For batch download, we don't get full info (sector, etc.) 
-                # We try to keep existing metadata from cache if available
                 existing = all_cached.get(symbol) or mapping.get(symbol)
                 
                 new_snap = PriceSnapshot(
@@ -356,7 +487,6 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                     raw=existing.raw if existing else {},
                 )
                 mapping[symbol] = new_snap
-                # Background task to update cache
                 asyncio.create_task(upsert_cached_price(new_snap))
             except Exception as e:
                 print(f"Error processing batch result for {symbol}: {e}")
@@ -365,9 +495,9 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                 continue
     except Exception as e:
         print(f"Batch download failed: {e}")
-        # On global failure, fall back to whatever cache we have for missing symbols
-        for symbol in missing:
+        for symbol in still_missing:
             if symbol not in mapping and symbol in all_cached:
+                mapping[symbol] = all_cached[symbol]
                 mapping[symbol] = all_cached[symbol]
 
     return mapping
