@@ -39,3 +39,5 @@ pytest-asyncio
 pytest-mock
 prometheus-fastapi-instrumentator
 sentry-sdk
+pdfplumber
+python-multipart

@@ -275,3 +275,93 @@ async def save_signal(user_id: str, ticker: str, signal_type: str, details: dict
 
 async def get_saved_signals(user_id: str):
     return supabase.table("saved_signals").select("*").eq("user_id", user_id).execute()
+
+# --- IMPORTED BROKER PORTFOLIOS ---
+
+async def save_imported_portfolio(user_id: str, broker: str, holdings: list, analysis: dict):
+    """
+    Saves the imported broker portfolio in two places:
+    1. Rich JSON data and analysis in the user's profile preferences
+    2. A standard user portfolio in the portfolios table so it integrates with standard tools
+    """
+    # 1. Save rich JSON and analysis in user profile preferences
+    try:
+        profile_res = await get_profile(user_id)
+        preferences = {}
+        if profile_res.data:
+            preferences = profile_res.data[0].get("preferences") or {}
+        
+        preferences["imported_portfolio"] = {
+            "broker": broker,
+            "holdings": holdings,
+            "analysis": analysis,
+            "synced_at": datetime.now(tz=timezone.utc).isoformat()
+        }
+        await update_profile(user_id, {"preferences": preferences})
+    except Exception as e:
+        print(f"Failed to update profile preferences with imported portfolio: {e}")
+        
+    # 2. Save as standard portfolio in portfolios table
+    try:
+        portfolio_name = f"{broker.capitalize()} Portfolio"
+        existing = supabase.table("portfolios").select("id").eq("user_id", user_id).eq("name", portfolio_name).execute()
+        
+        if existing.data:
+            portfolio_id = existing.data[0]["id"]
+            # Clear old positions
+            try:
+                supabase.table("portfolio_positions").delete().eq("portfolio_id", portfolio_id).execute()
+            except Exception as del_err:
+                print(f"Failed to clear old positions: {del_err}")
+                
+            # Update cash balance and description
+            supabase.table("portfolios").update({
+                "cash_balance": float(analysis.get("cash_balance") or 0.0),
+                "description": f"Imported portfolio from {broker.capitalize()}."
+            }).eq("id", portfolio_id).execute()
+        else:
+            res = await create_portfolio(
+                user_id=user_id,
+                name=portfolio_name,
+                strategy="Imported",
+                cash_balance=float(analysis.get("cash_balance") or 0.0),
+                description=f"Imported portfolio from {broker.capitalize()}."
+            )
+            if res.data:
+                portfolio_id = res.data[0]["id"]
+            else:
+                return
+                
+        # Insert all positions
+        positions_to_insert = []
+        for h in holdings:
+            shares = float(h.get("shares") or h.get("units") or 0.0)
+            avg_cost = float(h.get("avg_cost") or h.get("avg_cost_price") or 0.0)
+            ticker = str(h.get("ticker") or h.get("name") or "").upper()
+            if shares > 0 and avg_cost > 0 and ticker:
+                positions_to_insert.append({
+                    "portfolio_id": portfolio_id,
+                    "ticker": ticker,
+                    "exchange": "NSE",
+                    "shares": shares,
+                    "avg_cost_price": avg_cost
+                })
+        
+        if positions_to_insert:
+            supabase.table("portfolio_positions").insert(positions_to_insert).execute()
+    except Exception as e:
+        print(f"Failed to save standard portfolio for imported broker: {e}")
+
+async def get_imported_portfolio(user_id: str):
+    """
+    Retrieves the imported broker portfolio from user profile preferences.
+    """
+    try:
+        profile_res = await get_profile(user_id)
+        if profile_res.data:
+            preferences = profile_res.data[0].get("preferences") or {}
+            return preferences.get("imported_portfolio")
+    except Exception as e:
+        print(f"Failed to retrieve imported portfolio: {e}")
+    return None
+

@@ -3,6 +3,8 @@ import DashboardClientWrapper from "@/components/layout/DashboardClientWrapper";
 import { SandboxProvider } from "@/lib/sandboxContext";
 import { SandboxBanner } from "@/components/layout/SandboxBanner";
 
+export const dynamic = 'force-dynamic';
+
 export default function DashboardLayout({
   children,
 }: {

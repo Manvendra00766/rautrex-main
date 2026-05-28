@@ -6,22 +6,45 @@ import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Menu, X } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function Navbar() {
   const { user } = useAuthStore();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const [activeSection, setActiveSection] = useState("");
+
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 20);
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+      
+      const sections = ["features", "how-it-works", "why-us", "roadmap", "about"];
+      let currentActive = "";
+      for (const section of sections) {
+        const el = document.getElementById(section);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= 160 && rect.bottom >= 160) {
+            currentActive = section;
+            break;
+          }
+        }
+      }
+      setActiveSection(currentActive);
+    };
+    
+    // Run once on mount
+    handleScroll();
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const navLinks = [
-    { name: "Features", href: "#features" },
-    { name: "How It Works", href: "#how-it-works" },
-    { name: "About", href: "#about" },
+    { name: "Features", href: "/#features" },
+    { name: "How It Works", href: "/#how-it-works" },
+    { name: "Why Rautrex", href: "/#why-us" },
+    { name: "Roadmap", href: "/#roadmap" },
   ];
 
   return (
@@ -42,9 +65,21 @@ export default function Navbar() {
           <Link
             key={link.name}
             href={link.href}
-            className="text-sm font-medium text-text-muted hover:text-foreground transition-colors"
+            className={cn(
+              "text-sm font-medium transition-colors relative py-1",
+              activeSection === link.href.substring(1)
+                ? "text-accent font-bold"
+                : "text-text-muted hover:text-foreground"
+            )}
           >
             {link.name}
+            {activeSection === link.href.substring(1) && (
+              <motion.div
+                layoutId="activeNav"
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent"
+                transition={{ type: "spring", stiffness: 380, damping: 30 }}
+              />
+            )}
           </Link>
         ))}
       </div>
@@ -52,23 +87,23 @@ export default function Navbar() {
       {/* Auth Buttons */}
       <div className="hidden md:flex items-center gap-4">
         {user ? (
-          <Link href="/dashboard">
-            <Button className="bg-accent hover:bg-accent/90 text-foreground font-bold px-6 rounded-full transition-all hover:scale-105 active:scale-95">
+          <Button asChild className="bg-accent hover:bg-accent/90 text-foreground font-bold px-6 rounded-full transition-all hover:scale-105 active:scale-95">
+            <Link href="/dashboard">
               DASHBOARD
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         ) : (
           <>
-            <Link href="/login">
-              <Button variant="ghost" className="text-text-muted hover:text-foreground font-bold">
+            <Button asChild variant="ghost" className="text-text-muted hover:text-foreground font-bold">
+              <Link href="/login">
                 LOGIN
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button className="bg-accent hover:bg-accent/90 text-foreground font-bold px-6 rounded-full transition-all hover:scale-105 active:scale-95">
+              </Link>
+            </Button>
+            <Button asChild className="bg-accent hover:bg-accent/90 text-foreground font-bold px-6 rounded-full transition-all hover:scale-105 active:scale-95">
+              <Link href="/signup">
                 GET STARTED
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </>
         )}
       </div>
@@ -85,7 +120,10 @@ export default function Navbar() {
             <Link
               key={link.name}
               href={link.href}
-              className="text-lg font-medium text-text-muted"
+              className={cn(
+                "text-lg font-medium transition-colors",
+                activeSection === link.href.substring(1) ? "text-accent font-bold" : "text-text-muted"
+              )}
               onClick={() => setMobileMenuOpen(false)}
             >
               {link.name}
@@ -93,17 +131,17 @@ export default function Navbar() {
           ))}
           <div className="flex flex-col gap-3 pt-4 border-t border-border">
             {user ? (
-               <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
-                  <Button className="w-full bg-accent text-foreground font-bold">DASHBOARD</Button>
-               </Link>
+               <Button asChild className="w-full bg-accent text-foreground font-bold">
+                 <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>DASHBOARD</Link>
+               </Button>
             ) : (
               <>
-                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full border-border text-foreground">LOGIN</Button>
-                </Link>
-                <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
-                  <Button className="w-full bg-accent text-foreground font-bold">GET STARTED</Button>
-                </Link>
+                <Button asChild variant="outline" className="w-full border-border text-foreground">
+                  <Link href="/login" onClick={() => setMobileMenuOpen(false)}>LOGIN</Link>
+                </Button>
+                <Button asChild className="w-full bg-accent text-foreground font-bold">
+                  <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>GET STARTED</Link>
+                </Button>
               </>
             )}
           </div>

@@ -18,7 +18,8 @@ import {
   Activity,
   Layers,
   AlertTriangle,
-  DollarSign
+  DollarSign,
+  Link2
 } from "lucide-react";
 
 const navGroups = [
@@ -49,6 +50,7 @@ const navGroups = [
     title: "PORTFOLIO & RISK",
     items: [
       { label: "Portfolio", href: "/dashboard/portfolio", icon: Briefcase },
+      { label: "Imported Demat", href: "/dashboard/imported-portfolio", icon: Link2 },
       { label: "Risk", href: "/dashboard/risk", icon: AlertTriangle },
       { label: "Options", href: "/dashboard/options", icon: Database },
     ]

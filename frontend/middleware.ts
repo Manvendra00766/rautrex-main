@@ -62,7 +62,8 @@ export async function middleware(req: NextRequest) {
                           req.nextUrl.pathname.startsWith('/portfolio') ||
                           req.nextUrl.pathname.startsWith('/market') ||
                           req.nextUrl.pathname.startsWith('/backtest') ||
-                          req.nextUrl.pathname.startsWith('/signals')
+                          req.nextUrl.pathname.startsWith('/signals') ||
+                          req.nextUrl.pathname.startsWith('/onboarding')
 
   // If no session and on protected page → go to login
   if (!session && isProtectedPage) {
@@ -87,6 +88,8 @@ export const config = {
     '/market/:path*',
     '/backtest/:path*',
     '/signals/:path*',
+    '/onboarding',
+    '/onboarding/:path*',
     '/login',
     '/signup',
   ]

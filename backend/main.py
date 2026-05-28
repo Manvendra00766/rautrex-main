@@ -24,7 +24,7 @@ import json
 from utils import safe_json
 
 # Import routers
-from routers import stocks, portfolio, monte_carlo, backtester, options, risk, signals, market, validate, users, notifications, alerts, strategy_compare, dcf_router, screener_router, paper_trading_router, report_router
+from routers import stocks, portfolio, monte_carlo, backtester, options, risk, signals, market, validate, users, notifications, alerts, strategy_compare, dcf_router, screener_router, paper_trading_router, report_router, onboarding
 from websocket_app.routes import router as ws_router
 
 # Setup structured logging
@@ -145,6 +145,8 @@ app.include_router(report_router.router)
 app.include_router(notifications.router)
 app.include_router(alerts.router)
 app.include_router(users.router)
+app.include_router(onboarding.router, prefix="/api/onboarding", tags=["Onboarding"])
+app.include_router(onboarding.router, prefix="/api/v1/onboarding", tags=["Onboarding"])
 
 # Websocket router
 app.include_router(ws_router, tags=["Websockets"])
