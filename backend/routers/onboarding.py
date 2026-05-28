@@ -646,7 +646,14 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
         # Immediately fetch active holdings to populate the dashboard!
         access_token = token_data.get("access_token")
         holdings_url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
-        holdings_res = requests.get(holdings_url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        holdings_res = requests.get(
+            holdings_url, 
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {access_token}"
+            }, 
+            timeout=10
+        )
         
         holdings = []
         if holdings_res.status_code == 200:

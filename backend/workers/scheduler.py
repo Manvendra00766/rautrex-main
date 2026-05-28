@@ -146,7 +146,7 @@ class BackgroundWorker:
                             if refresh_token:
                                 client_id = os.getenv("UPSTOX_CLIENT_ID")
                                 client_secret = os.getenv("UPSTOX_CLIENT_SECRET")
-                                refresh_url = "https://api.upstox.com/v2/oauth/token"
+                                refresh_url = "https://api.upstox.com/v2/login/authorization/token"
                                 refresh_res = requests.post(refresh_url, data={
                                     "grant_type": "refresh_token",
                                     "refresh_token": refresh_token,
