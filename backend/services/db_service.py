@@ -19,7 +19,7 @@ async def get_portfolios(user_id: str):
         .select("*, portfolio_positions(*), transactions(*)") \
         .eq("user_id", user_id).execute()
 
-async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", cash_balance: float = 0, description: str = None):
+async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", cash_balance: float = 0, description: str = None, currency: str = "USD"):
     # FIXED: Record initial NAV snapshot on portfolio creation so history charts render instantly with a baseline
     existing = supabase.table("portfolios").select("id").eq("user_id", user_id).limit(1).execute()
     is_default = not bool(existing.data)
@@ -32,6 +32,7 @@ async def create_portfolio(user_id: str, name: str, strategy: str = "Equity", ca
         "cash_balance": cash_balance,
         "initial_cash": cash_balance,
         "is_default": is_default,
+        "currency": currency,
     }).execute()
     
     if res.data:
@@ -306,6 +307,9 @@ async def save_imported_portfolio(user_id: str, broker: str, holdings: list, ana
         portfolio_name = f"{broker.capitalize()} Portfolio"
         existing = supabase.table("portfolios").select("id").eq("user_id", user_id).eq("name", portfolio_name).execute()
         
+        # Determine currency based on broker
+        currency = "INR" if broker.lower() in ["upstox", "zerodha", "groww", "cas_statement"] else "USD"
+        
         if existing.data:
             portfolio_id = existing.data[0]["id"]
             # Clear old positions
@@ -314,10 +318,11 @@ async def save_imported_portfolio(user_id: str, broker: str, holdings: list, ana
             except Exception as del_err:
                 print(f"Failed to clear old positions: {del_err}")
                 
-            # Update cash balance and description
+            # Update cash balance, description and currency
             supabase.table("portfolios").update({
                 "cash_balance": float(analysis.get("cash_balance") or 0.0),
-                "description": f"Imported portfolio from {broker.capitalize()}."
+                "description": f"Imported portfolio from {broker.capitalize()}.",
+                "currency": currency
             }).eq("id", portfolio_id).execute()
         else:
             res = await create_portfolio(
@@ -325,7 +330,8 @@ async def save_imported_portfolio(user_id: str, broker: str, holdings: list, ana
                 name=portfolio_name,
                 strategy="Imported",
                 cash_balance=float(analysis.get("cash_balance") or 0.0),
-                description=f"Imported portfolio from {broker.capitalize()}."
+                description=f"Imported portfolio from {broker.capitalize()}.",
+                currency=currency
             )
             if res.data:
                 portfolio_id = res.data[0]["id"]

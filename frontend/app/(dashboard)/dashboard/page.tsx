@@ -87,7 +87,10 @@ export default function Dashboard() {
       (pos: any) => pos.ticker && (pos.ticker.endsWith(".NS") || pos.ticker.endsWith(".BO"))
     )
     
-    if (isIndianBroker || hasIndianTicker) {
+    const dbCurrency = overview?.portfolio?.currency || overview?.portfolio?.base_currency
+    const isINR = dbCurrency === "INR" || isIndianBroker || hasIndianTicker
+    
+    if (isINR) {
       setActiveCurrency("INR")
     } else {
       setActiveCurrency("USD")
@@ -390,7 +393,7 @@ export default function Dashboard() {
                 <AreaChart data={equity_curve} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="snapshot_date" stroke="var(--text-muted)" fontSize={11} minTickGap={50} tickMargin={10} axisLine={false} tickLine={false} />
-                  <YAxis stroke="var(--text-muted)" fontSize={11} domain={yDomain} tickFormatter={(value) => `$${value.toLocaleString()}`} axisLine={false} tickLine={false} />
+                  <YAxis stroke="var(--text-muted)" fontSize={11} domain={yDomain} tickFormatter={(value) => `${activeCurrency === "INR" ? "₹" : "$"}${value.toLocaleString()}`} axisLine={false} tickLine={false} />
                   <Tooltip
                     contentStyle={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 4, padding: "8px 12px" }}
                     itemStyle={{ color: "var(--accent)", fontWeight: "bold", fontSize: "13px" }}

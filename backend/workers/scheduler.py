@@ -109,7 +109,18 @@ class BackgroundWorker:
                             "Authorization": f"Bearer {access_token}",
                             "Accept": "application/json"
                         }
-                        # Production URL for holdings
+                        
+                        # 1. Fetch available margin
+                        try:
+                            funds_url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+                            funds_res = requests.get(funds_url, headers=headers, timeout=10)
+                            if funds_res.status_code == 200:
+                                funds_data = funds_res.json().get("data") or {}
+                                cash_balance = float(funds_data.get("equity", {}).get("available_margin") or 0.0)
+                        except Exception as funds_err:
+                            logger.error(f"Failed to fetch Upstox funds in scheduler: {funds_err}")
+                            
+                        # 2. Fetch holdings
                         url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
                         response = requests.get(url, headers=headers, timeout=10)
                         
@@ -169,6 +180,7 @@ class BackgroundWorker:
                     if holdings:
                         # Run the analysis engine on new holdings
                         analysis = analyze_portfolio(holdings, None)
+                        analysis["cash_balance"] = cash_balance
                         
                         # Save the updated telemetry to profile preferences and portfolios table
                         await db_service.save_imported_portfolio(

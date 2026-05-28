@@ -103,7 +103,10 @@ export default function PortfolioLab() {
       (pos: any) => pos.ticker && (pos.ticker.endsWith(".NS") || pos.ticker.endsWith(".BO"))
     )
     
-    if (isIndianBroker || hasIndianTicker) {
+    const dbCurrency = overview?.portfolio?.currency || overview?.portfolio?.base_currency
+    const isINR = dbCurrency === "INR" || isIndianBroker || hasIndianTicker
+    
+    if (isINR) {
       setActiveCurrency("INR")
     } else {
       setActiveCurrency("USD")
@@ -510,7 +513,7 @@ export default function PortfolioLab() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
                       <XAxis dataKey="snapshot_date" stroke="rgba(255,255,255,0.35)" fontSize={10} minTickGap={40} />
-                      <YAxis stroke="rgba(255,255,255,0.35)" fontSize={10} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
+                      <YAxis stroke="rgba(255,255,255,0.35)" fontSize={10} tickFormatter={(value) => `${activeCurrency === "INR" ? "₹" : "$"}${(value / 1000).toFixed(0)}k`} />
                       <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ backgroundColor: "#11121a", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16 }} />
                       <Area type="monotone" dataKey="nav" stroke="#00d4ff" strokeWidth={2} fill="url(#portfolioEquity)" />
                     </AreaChart>

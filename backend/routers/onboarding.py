@@ -645,15 +645,25 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
         
         # Immediately fetch active holdings to populate the dashboard!
         access_token = token_data.get("access_token")
+        headers = {
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
+        
+        # 1. Fetch available cash margin from Upstox
+        upstox_cash = 0.0
+        try:
+            funds_url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+            funds_res = requests.get(funds_url, headers=headers, timeout=10)
+            if funds_res.status_code == 200:
+                funds_data = funds_res.json().get("data") or {}
+                upstox_cash = float(funds_data.get("equity", {}).get("available_margin") or 0.0)
+        except Exception as funds_err:
+            logger.error(f"Failed to fetch Upstox funds: {funds_err}")
+            
+        # 2. Fetch holdings
         holdings_url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
-        holdings_res = requests.get(
-            holdings_url, 
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {access_token}"
-            }, 
-            timeout=10
-        )
+        holdings_res = requests.get(holdings_url, headers=headers, timeout=10)
         
         holdings = []
         if holdings_res.status_code == 200:
@@ -683,6 +693,7 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
                 
         # Analyze and save
         analysis = analyze_portfolio(holdings, None)
+        analysis["cash_balance"] = upstox_cash
         await db_service.save_imported_portfolio(current_user.id, "upstox", holdings, analysis)
         
         return {

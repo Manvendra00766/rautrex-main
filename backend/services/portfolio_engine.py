@@ -247,7 +247,8 @@ def compute_portfolio_state(
             cash_balance -= (gross_amount or fees)
         elif tx_type == "BUY" and symbol:
             total_cost = (quantity * price) + fees
-            cash_balance -= total_cost
+            if not tx.get("metadata", {}).get("synthetic_from_position"):
+                cash_balance -= total_cost
             cost_per_share = safe_div(total_cost, quantity)
             open_lots[symbol].append(
                 TaxLot(symbol=symbol, quantity=quantity, cost_per_share=cost_per_share, opened_at=tx["executed_at"])
@@ -451,7 +452,8 @@ def build_equity_curve(
             elif tx_type == "BUY" and symbol:
                 total_cost = (quantity * price) + fees
                 shares_by_symbol[symbol] += quantity
-                cash_balance -= total_cost
+                if not tx.get("metadata", {}).get("synthetic_from_position"):
+                    cash_balance -= total_cost
                 # BUY itself is not a cash flow out of the portfolio system, 
                 # but it changes cash balance. Net cash flow into the system is 0.
             elif tx_type == "SELL" and symbol:
@@ -729,12 +731,14 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
             })
     # Negative cash balance warning
     if state["cash_balance"] < 0.0:
+        p_currency = portfolio.get("currency") or portfolio.get("base_currency") or "USD"
+        curr_symbol = "₹" if p_currency == "INR" else "$"
         alerts.append({
             "id": "neg_cash",
             "type": "risk_breach",
             "severity": "critical",
             "title": "Negative Cash Balance",
-            "message": f"Portfolio cash balance is ${state['cash_balance']:,.2f}. Check transaction records.",
+            "message": f"Portfolio cash balance is {curr_symbol}{state['cash_balance']:,.2f}. Check transaction records.",
             "affected_asset": None,
             "triggered_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "threshold": 0.0,
@@ -808,7 +812,7 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
             "id": portfolio["id"],
             "name": portfolio["name"],
             "description": portfolio.get("description"),
-            "base_currency": portfolio.get("base_currency") or "USD",
+            "base_currency": portfolio.get("currency") or portfolio.get("base_currency") or "USD",
             "benchmark_symbol": portfolio.get("benchmark_symbol") or "SPY",
             "is_default": portfolio.get("is_default", False),
             "margin_enabled": portfolio.get("margin_enabled", False),
