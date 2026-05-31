@@ -161,7 +161,15 @@ async def optimize_portfolio(
     current_user = Depends(get_current_user)
 ):
     if not req.tickers:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker")
+        # Return empty skeleton instead of HTTP 400 when portfolio is empty
+        empty_res = {
+            "optimal_weights": {}, 
+            "weight_details": [], 
+            "frontier": [], 
+            "random_portfolios": [],
+            "validation": {"is_valid": True, "messages": []}
+        }
+        return JSONResponse(content=safe_json(empty_res))
     try:
         res = await optimize_portfolio_logic(
             req.tickers, req.method, req.objective, req.constraints, req.risk_free_rate
@@ -178,7 +186,9 @@ async def corr_matrix(
     tickers: str, 
     current_user = Depends(get_current_user)
 ):
-    ticker_list = tickers.split(",")
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        return JSONResponse(content=safe_json({"correlation_matrix": []}))
     try:
         res = await get_correlation_matrix(ticker_list)
         return JSONResponse(content=safe_json({"correlation_matrix": res}))
@@ -192,6 +202,14 @@ async def rebalance_portfolio(
     req: RebalanceRequest, 
     current_user = Depends(get_current_user)
 ):
+    if not req.target_weights:
+        # Graceful empty response for empty portfolios
+        empty_res = {
+            "trades": [], 
+            "post_rebalance_weights": {}, 
+            "cash_remaining": req.total_value or 0
+        }
+        return JSONResponse(content=safe_json(empty_res))
     try:
         res = await calculate_rebalance(
             [p.dict() for p in req.current_positions],

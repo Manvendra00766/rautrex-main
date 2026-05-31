@@ -55,7 +55,12 @@ async def _get_returns_async(tickers: List[str], years: int = 2) -> pd.DataFrame
         end_d = date.today()
         start_d = end_d - timedelta(days=years * 365)
         
-        histories = await get_price_history(tickers, start=start_d, end=end_d)
+        try:
+            histories = await get_price_history(tickers, start=start_d, end=end_d)
+        except Exception as api_e:
+            print(f"API Error fetching history: {api_e}")
+            histories = {}
+            
         prices = pd.DataFrame(histories) if histories else pd.DataFrame()
         
         # Inject synthetic fallback for any ticker that completely failed to download
@@ -246,28 +251,29 @@ async def calculate_rebalance(
     threshold: float = 0.05,
     total_value: Optional[float] = None
 ):
+    tickers = list(target_weights.keys())
+    
+    current_prices = {}
+    if tickers:
+        from services.pricing_engine import get_price_history
+        from datetime import date, timedelta
+        end_d = date.today()
+        start_d = end_d - timedelta(days=5)
+        try:
+            histories = await get_price_history(tickers, start=start_d, end=end_d)
+            for t, hist in histories.items():
+                if hist:
+                    current_prices[t] = hist[-1]["close"]
+        except Exception as e:
+            print(f"Error fetching prices for rebalance: {e}")
+            
+    # Ensure prices for all tickers
+    for t in tickers:
+        if t not in current_prices or pd.isna(current_prices[t]):
+            current_prices[t] = 100.0 # Extreme fallback
+
     loop = asyncio.get_event_loop()
     def _calc():
-        tickers = list(target_weights.keys())
-        data = yf.download(tickers, period="5d", progress=False)
-        
-        if 'Close' in data.columns:
-            close_data = data['Close']
-        else:
-            close_data = data.xs('Close', axis=1, level=0) if isinstance(data.columns, pd.MultiIndex) else data
-            
-        current_prices = {}
-        if isinstance(close_data, pd.DataFrame):
-            if not close_data.empty:
-                current_prices = close_data.iloc[-1].to_dict()
-        elif isinstance(close_data, pd.Series):
-            current_prices = {tickers[0]: close_data.iloc[-1]}
-        
-        # Ensure prices for all tickers
-        for t in tickers:
-            if t not in current_prices or pd.isna(current_prices[t]):
-                current_prices[t] = 100.0 # Extreme fallback
-
         if total_value is None:
             calc_total = sum(p['shares'] * current_prices.get(p['ticker'], 0) for p in current_positions)
         else:
