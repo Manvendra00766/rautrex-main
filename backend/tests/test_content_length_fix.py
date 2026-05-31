@@ -1,7 +1,6 @@
 import pytest
 import asyncio
 import httpx
-import json
 from backend.main import app
 
 @pytest.fixture

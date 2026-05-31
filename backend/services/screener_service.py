@@ -2,8 +2,6 @@ import asyncio
 import json
 import hashlib
 import yfinance as yf
-import pandas as pd
-import numpy as np
 from typing import List, Optional, Dict, Any
 from infrastructure.redis_client import redis_client
 from schemas.screener_schema import ScreenerFilterRequest, ScreenerStockResult

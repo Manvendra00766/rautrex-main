@@ -1,8 +1,6 @@
 import pytest
-import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
-import numpy as np
 
 # Adjust path to import backend modules correctly
 from pathlib import Path

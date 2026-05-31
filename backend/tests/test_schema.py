@@ -1,7 +1,6 @@
 import pytest
 import jwt
 import os
-import asyncio
 import uuid
 from sqlalchemy import text
 from backend.database.connection import engine

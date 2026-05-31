@@ -1,16 +1,14 @@
 import pytest
-import asyncio
 import httpx
 import respx
 from unittest.mock import MagicMock, patch
 import pandas as pd
-from datetime import datetime, timezone
+from datetime import datetime
 
 from services.market_data_service import market_data_service
 from services.adapters.alpaca_adapter import AlpacaAdapter
 from services.adapters.upstox_adapter import UpstoxAdapter
 from services.adapters.oanda_adapter import OandaAdapter
-from services.pricing_engine import PriceSnapshot
 
 # ── Mock Helper for yfinance ──────────────────────────────────────────
 class MockYfinanceTicker:

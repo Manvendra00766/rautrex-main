@@ -1,6 +1,5 @@
 from supabase_client import supabase
 from datetime import datetime, timezone
-import asyncio
 from fastapi import HTTPException
 
 # --- PROFILES ---

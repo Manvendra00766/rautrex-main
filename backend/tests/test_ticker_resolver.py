@@ -2,7 +2,6 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from models.user_data import CompanyTickerMapping
 from services.ticker_resolver import ticker_resolver_service

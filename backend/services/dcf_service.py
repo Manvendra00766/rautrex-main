@@ -1,5 +1,4 @@
 import yfinance as yf
-import numpy as np
 from typing import Optional
 from schemas.dcf_schema import DCFInput, DCFOutput
 from datetime import datetime
@@ -258,7 +257,8 @@ class DCFService:
 
         # --- 8. Sensitivity ---
         # Disable logging for sensitivity to avoid flooding logs
-        import sys, os
+        import sys
+        import os
         original_stdout = sys.stdout
         sys.stdout = open(os.devnull, 'w')
         try:

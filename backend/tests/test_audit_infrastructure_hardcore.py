@@ -1,19 +1,16 @@
 import pytest
 import os
 import json
-import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch, MagicMock
 from decimal import Decimal
 import enum
 
 from core.config import settings
-from core.exceptions import AppError
 from infrastructure.cache import cache_response
-from services.pricing_engine import get_price_snapshot, PriceSnapshot, normalize_symbol, get_price_history
+from services.pricing_engine import get_price_snapshot
 from repositories.portfolio_repo import portfolio_repo, PortfolioSchema
-from database.connection import Base, AsyncSessionLocal
-from models.user_data import UserPortfolio, PortfolioPosition
+from models.user_data import UserPortfolio
 
 # ==============================================================================
 # AUDIT CONCERN 1: ALEMBIC SCHEMA VERSIONING VALIDATION

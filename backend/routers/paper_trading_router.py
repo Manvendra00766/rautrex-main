@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from typing import List
 from schemas.paper_trading_schema import PlaceOrderRequest, Order, Portfolio
 from services.paper_trading_service import paper_trading_service

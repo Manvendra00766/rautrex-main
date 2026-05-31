@@ -1,5 +1,4 @@
 import asyncio
-import json
 import time
 from typing import Callable, Dict, Any, Optional
 import websockets

@@ -1,11 +1,9 @@
 import asyncio
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 import httpx
 import yfinance as yf
 
-from core.config import settings
 from core.logger import logger
 from services.pricing_engine import (
     PriceSnapshot, infer_asset_type, SECTOR_MAP,

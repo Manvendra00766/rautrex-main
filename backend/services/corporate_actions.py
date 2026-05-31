@@ -1,11 +1,10 @@
 import os
-from datetime import datetime, timezone
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from core.logger import logger
-from models.user_data import PortfolioPosition, UserPortfolio
+from models.user_data import PortfolioPosition
 
 class CorporateActionsService:
     def __init__(self):

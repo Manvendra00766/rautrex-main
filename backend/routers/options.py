@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
+from typing import Dict, List, Optional
 from services.options_service import price_option, fetch_options_chain, calculate_strategy_pnl, generate_iv_surface
 from auth import get_current_user
 

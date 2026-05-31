@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 def validate_financial_metrics(metrics: Dict[str, Any]) -> Dict[str, Any]:
     warnings = []

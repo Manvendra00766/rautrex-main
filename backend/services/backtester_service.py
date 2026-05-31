@@ -2,8 +2,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import asyncio
-from typing import Dict, Any, List
-import math
+from typing import Dict, Any
 from utils import safe_json
 from tenacity import retry, stop_after_attempt, wait_exponential
 

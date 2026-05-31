@@ -1,7 +1,5 @@
-import yfinance as yf
 from supabase_client import supabase
 from services.notification_service import create_notification
-from typing import List, Dict, Any
 
 async def check_price_alerts():
     """

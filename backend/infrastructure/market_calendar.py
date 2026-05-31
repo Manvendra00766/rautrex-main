@@ -1,7 +1,6 @@
 import datetime
 from zoneinfo import ZoneInfo
 from typing import Tuple, Dict, Any, Optional
-from core.logger import logger
 from infrastructure.time_sync import offset_calibrated_now
 
 class MarketCalendarService:

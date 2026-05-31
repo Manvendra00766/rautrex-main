@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List
 from schemas.dcf_schema import DCFInput, DCFOutput, DCFSaveRequest, DCFCompareRequest, DCFCompareResponse
 from services.dcf_service import dcf_service
 from services.pdf_service import generate_dcf_report

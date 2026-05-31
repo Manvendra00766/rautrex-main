@@ -5,7 +5,6 @@ from services.report_service import report_service
 from services import db_service
 from core.logger import logger
 import os
-import asyncio
 
 router = APIRouter(prefix="/api/v1/report", tags=["Reports"])
 

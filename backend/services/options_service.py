@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 import yfinance as yf
-from typing import Dict, Any, List, Optional
+from typing import Dict, List
 import asyncio
 from datetime import datetime
 from utils import safe_json

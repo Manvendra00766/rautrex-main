@@ -1,6 +1,6 @@
 import asyncio
 import yfinance as yf
-from typing import List, Optional, Dict
+from typing import List
 from fastapi import HTTPException
 from datetime import datetime
 from schemas.paper_trading_schema import PlaceOrderRequest, Order, Position, Portfolio

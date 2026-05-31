@@ -1,11 +1,9 @@
-import os
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import declarative_base
 
 from database.connection import Base
-from models.user_data import CompanyTickerMapping, PriceAlert, User, UserPortfolio
+from models.user_data import CompanyTickerMapping
 from infrastructure.cache import cache_response
 from infrastructure.redis_client import redis_client
 

@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 class BacktestingEngine:
     def __init__(self, initial_capital: float = 10000.0, fee_pct: float = 0.001, slippage_pct: float = 0.0005):

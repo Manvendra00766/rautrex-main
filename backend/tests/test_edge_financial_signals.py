@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import pandas as pd
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch, AsyncMock
 from services.monte_carlo_service import run_monte_carlo_simulation
 from services.backtester_service import _backtest_sync
 from services.portfolio_service import calculate_rebalance

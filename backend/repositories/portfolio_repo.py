@@ -1,8 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel
 from .base import BaseRepository
-from supabase_client import supabase
-from core.logger import logger
 
 class PortfolioSchema(BaseModel):
     id: Optional[str] = None

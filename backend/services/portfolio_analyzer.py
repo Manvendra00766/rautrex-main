@@ -1,4 +1,3 @@
-import numpy as np
 from typing import List, Dict, Any, Optional
 from core.logger import logger
 
@@ -335,7 +334,7 @@ def analyze_portfolio(holdings: List[Dict[str, Any]], onboarding_data: Optional[
             recommendations.append({
                 "category": "Hedging",
                 "title": "Missing Gold Protection",
-                "description": f"You are under-allocated in Gold/ETFs. Adding 10-15% gold allocation (e.g. via Sovereign Gold Bonds or Gold BeES) provides a strong buffer during market drawdowns.",
+                "description": "You are under-allocated in Gold/ETFs. Adding 10-15% gold allocation (e.g. via Sovereign Gold Bonds or Gold BeES) provides a strong buffer during market drawdowns.",
                 "action": "Explore Gold ETFs"
             })
 

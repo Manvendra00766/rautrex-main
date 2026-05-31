@@ -2,13 +2,12 @@ import os
 import json
 import asyncio
 import time
-import uuid
 import sqlite3
 import gc
 import numpy as np
 import pandas as pd
 import yfinance as yf
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import joblib
 
 # ML Libraries
@@ -16,7 +15,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.ensemble import IsolationForest, RandomForestClassifier
+from sklearn.ensemble import IsolationForest
 import xgboost as xgb
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import ta

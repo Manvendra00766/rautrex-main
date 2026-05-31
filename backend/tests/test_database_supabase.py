@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from unittest.mock import patch, MagicMock
 from fastapi import HTTPException
 from services import db_service

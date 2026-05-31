@@ -6,10 +6,8 @@ from services.notification_service import create_notification
 from services.backtester_service import _backtest_sync
 from services.db_service import mark_all_read
 from services.monte_carlo_service import run_monte_carlo_simulation
-from auth import sign_in, refresh_session, User
-import json
+from auth import sign_in, refresh_session
 import pandas as pd
-import numpy as np
 
 # --- CONCURRENCY TESTS ---
 

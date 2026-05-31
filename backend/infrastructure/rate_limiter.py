@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Callable, Any, Coroutine, Optional
+from typing import Callable, Any, Coroutine
 import httpx
 from core.logger import logger
 

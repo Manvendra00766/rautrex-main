@@ -111,7 +111,7 @@ class BaseRepository(Generic[T]):
                 return None
         except Exception as e:
             logger.error(f"Error fetching from {self.table_name} by id {id}: {e}")
-            raise AppError(f"Database fetch failed", status_code=500)
+            raise AppError("Database fetch failed", status_code=500)
 
     async def get_all(self, filters: Optional[Dict[str, Any]] = None) -> List[T]:
         """Fetch all records matching filters asynchronously and return typed Pydantic models."""
@@ -132,7 +132,7 @@ class BaseRepository(Generic[T]):
                 return [self._to_pydantic(obj) for obj in results]
         except Exception as e:
             logger.error(f"Error fetching all from {self.table_name}: {e}")
-            raise AppError(f"Database fetch failed", status_code=500)
+            raise AppError("Database fetch failed", status_code=500)
 
     async def create(self, data: T) -> T:
         """Create a new database record asynchronously, filtering for columns that exist in the database table."""
@@ -167,7 +167,7 @@ class BaseRepository(Generic[T]):
                 return self._to_pydantic(db_obj)
         except Exception as e:
             logger.error(f"Error creating in {self.table_name}: {e}")
-            raise AppError(f"Database insert failed", status_code=500)
+            raise AppError("Database insert failed", status_code=500)
 
     async def update(self, id: str, data: Dict[str, Any]) -> T:
         """Update a record atomically inside an async transaction block, filtering for table columns."""
@@ -211,7 +211,7 @@ class BaseRepository(Generic[T]):
             raise
         except Exception as e:
             logger.error(f"Error updating {self.table_name} id {id}: {e}")
-            raise AppError(f"Database update failed", status_code=500)
+            raise AppError("Database update failed", status_code=500)
 
     async def delete(self, id: str) -> bool:
         """Atomically delete a record asynchronously using SQLAlchemy sessions."""

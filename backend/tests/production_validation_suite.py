@@ -17,7 +17,6 @@ import os
 import sys
 import time
 import random
-import math
 import tracemalloc
 import asyncio
 import concurrent.futures
@@ -174,7 +173,7 @@ def run_d1_financial_validation(n_trials=1000):
 
     # ── Build Markdown ──
     md = StringIO()
-    md.write(f"# RAUTREX — Financial Math Validation Report\n\n")
+    md.write("# RAUTREX — Financial Math Validation Report\n\n")
     md.write(f"> **Phase D1** — {n_trials} randomized portfolio simulations executed at runtime.\n\n")
     md.write("---\n\n## 1. Aggregate Error Summary\n\n")
     md.write("| Metric | Mean Error % | Max Error % | P99 Error % | Status |\n")
@@ -279,7 +278,7 @@ def run_d2_load_testing():
     md.write("- All computations ran against the **real PortfolioCalculationService** (NAV, weights, Sharpe, Sortino, VaR, drawdowns).\n")
     md.write("- Latency is per-request average; throughput reflects actual concurrent execution with thread pool capping at 64 OS threads.\n")
     md.write("- Peak memory delta measures the additional allocation during the burst.\n")
-    md.write(f"- **Zero errors** observed across all load tiers.\n" if all(r["errors"] == 0 for r in results.values()) else "- Some errors detected — see details above.\n")
+    md.write("- **Zero errors** observed across all load tiers.\n" if all(r["errors"] == 0 for r in results.values()) else "- Some errors detected — see details above.\n")
 
     with open(os.path.join(ROOT, "LOAD_TEST_REPORT.md"), "w") as f:
         f.write(md.getvalue())
@@ -657,7 +656,7 @@ def run_d5_final_score(d1_stats, d2_results, d3_chaos, d4_security):
         s = f"{score:.2f}%" if score is not None else "N/A"
         md.write(f"| **{name}** | **{s}** | {basis} |\n")
 
-    md.write(f"\n---\n\n## Overall Production Readiness\n\n")
+    md.write("\n---\n\n## Overall Production Readiness\n\n")
     md.write(f"# **{overall:.2f}%**\n\n")
     md.write(f"> {overall_basis}\n\n")
 

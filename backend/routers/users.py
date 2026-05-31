@@ -6,7 +6,7 @@ from services.portfolio_engine import create_transaction, get_portfolio_overview
 from pydantic import BaseModel, Field, validator
 from auth import get_current_user
 from core.logger import logger
-from typing import Optional, List
+from typing import Optional
 from utils import safe_json
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])

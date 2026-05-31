@@ -1,6 +1,5 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
-import asyncio
 from main import app
 from services.dcf_service import dcf_service
 from schemas.dcf_schema import DCFInput

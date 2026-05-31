@@ -2,7 +2,7 @@ import requests
 import asyncio
 import os
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional
 from core.logger import logger
 from supabase_client import supabase
 from services.pricing_engine import upsert_cached_price, PriceSnapshot

@@ -2,7 +2,6 @@ import pytest
 from fastapi.testclient import TestClient
 from main import app
 from dependencies import get_current_user
-from services.paper_trading_service import paper_trading_service
 from schemas.paper_trading_schema import Order, Portfolio, Position
 
 client = TestClient(app)

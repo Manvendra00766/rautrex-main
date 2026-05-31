@@ -5,7 +5,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from core.config import settings
 from core.exceptions import AuthenticationError
-from core.logger import logger
 
 security_scheme = HTTPBearer()
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from services.backtester_service import run_backtest_logic
 from services.validation_service import validate_financial_metrics
 from auth import get_current_user

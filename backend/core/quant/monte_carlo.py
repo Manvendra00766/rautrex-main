@@ -1,6 +1,5 @@
 import numpy as np
-import pandas as pd
-from typing import Dict, List, Tuple
+from typing import Tuple
 
 class MonteCarloEngine:
     def __init__(self, num_simulations: int = 1000, time_horizon: int = 252):

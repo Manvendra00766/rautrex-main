@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
-from typing import Dict, List, Tuple, Any
+from typing import Dict, Tuple, Any
 from core.financial_constants import RISK_FREE_RATE
 
 class PortfolioOptimizer:

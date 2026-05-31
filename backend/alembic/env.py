@@ -16,21 +16,6 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 from database.connection import Base
 # Import models to ensure they are registered on Base.metadata
-from models.user_data import (
-    User,
-    UserPortfolio,
-    PortfolioPosition,
-    Watchlist,
-    WatchlistItem,
-    SavedBacktest,
-    SavedSignal,
-    SavedSimulation,
-    Notification,
-    PriceAlert,
-    CompanyTickerMapping,
-    PortfolioMetricsCache,
-    Instrument
-)
 
 target_metadata = Base.metadata
 

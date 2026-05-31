@@ -1,9 +1,6 @@
-import yfinance as yf
-import pandas as pd
 from supabase_client import supabase
 from services.notification_service import create_notification
 from websocket_app.manager import manager
-from typing import List, Dict, Any
 from core.logger import logger
 from datetime import datetime
 

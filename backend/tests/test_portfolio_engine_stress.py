@@ -1,13 +1,11 @@
 import pytest
 import asyncio
 import httpx
-import json
 import math
 import numpy as np
-from typing import Any, Dict, List
-from datetime import datetime, timezone
+from typing import Any
+from datetime import datetime
 from backend.main import app
-from backend.utils import safe_json
 
 # Configuration for test user and cleanup
 TEST_USER_ID = "test-user-stress-alpha"
@@ -151,7 +149,7 @@ async def test_portfolio_lifecycle_and_stress(client, auth_headers, test_portfol
     # 7️⃣ Massive Number Test
     massive_payload = {"ticker": "BIG", "quantity": 1_000_000, "avg_cost": 9999}
     # Need cash for this
-    await client.post(f"/api/v1/users/me/portfolios", json={"name": "BigMoney", "initial_cash": 20_000_000_000}, headers=auth_headers)
+    await client.post("/api/v1/users/me/portfolios", json={"name": "BigMoney", "initial_cash": 20_000_000_000}, headers=auth_headers)
     # Finding the ID
     p_list = (await client.get("/api/v1/users/me/portfolios", headers=auth_headers)).json()
     big_p_id = next(p["id"] for p in p_list if p["name"] == "BigMoney")

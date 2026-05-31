@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.stats import norm
-from typing import Dict, Any
+from typing import Dict
 from core.financial_constants import RISK_FREE_RATE
 
 class DerivativesEngine:

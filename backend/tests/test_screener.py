@@ -1,13 +1,10 @@
 import pytest
 import json
-import hashlib
 import pandas as pd
 import numpy as np
 from unittest.mock import patch, MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
 from main import app
-from schemas.screener_schema import ScreenerFilterRequest
-from services.screener_service import NIFTY50_TOP20
 from dependencies import get_current_user
 
 # Mock data for yfinance info

@@ -2,7 +2,6 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -13,13 +12,11 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 # Import core modules
 from core.config import settings
 from core.logger import setup_logging, logger
-from core.exceptions import AppError
 from middleware.logging_middleware import LoggingMiddleware
 from middleware.timeout_middleware import TimeoutMiddleware
 from middleware.exception_handler import setup_exception_handlers
 from infrastructure.redis_client import redis_client
 from services.market_data_service import market_data_service
-from services.alert_service import check_price_alerts
 import json
 from utils import safe_json
 
@@ -71,7 +68,6 @@ async def lifespan(app: FastAPI):
     # Initialize local SQLite database tables
     try:
         from database.connection import engine, Base
-        import models.user_data
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Local database tables initialized.")

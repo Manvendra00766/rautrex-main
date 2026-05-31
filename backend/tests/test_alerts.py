@@ -1,5 +1,4 @@
 import pytest
-import json
 from unittest.mock import patch, MagicMock, AsyncMock, ANY
 from httpx import AsyncClient, ASGITransport
 from main import app

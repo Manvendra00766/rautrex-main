@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import pandas as pd
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from services.monte_carlo_service import _compute_simulation
 from services.backtester_service import _backtest_sync
 from services.validation_service import validate_financial_metrics

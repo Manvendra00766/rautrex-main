@@ -3,8 +3,7 @@ import pandas as pd
 import numpy as np
 from httpx import AsyncClient, ASGITransport
 from main import app
-from unittest.mock import patch, MagicMock
-from datetime import datetime
+from unittest.mock import patch
 
 @pytest.fixture
 def mock_gfc_data():

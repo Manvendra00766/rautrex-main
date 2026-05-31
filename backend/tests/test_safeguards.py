@@ -1,12 +1,9 @@
 import pytest
 import os
-import json
-import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 import numpy as np
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 
 from services.fx_service import fx_rate_service
 from services.analytics_worker import analytics_worker_service

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List
 from services.risk_service import (
     calculate_portfolio_risk, 
     run_stress_test, 

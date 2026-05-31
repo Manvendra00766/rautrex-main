@@ -8,7 +8,6 @@ from auth import get_current_user
 from services import db_service
 from services.portfolio_analyzer import analyze_portfolio
 import yfinance as yf
-import pandas as pd
 import numpy as np
 from core.quant.portfolio_opt import PortfolioOptimizer
 from scipy.optimize import minimize
@@ -1008,7 +1007,6 @@ async def email_inbound_webhook(req_raw: Request = None):
     and updates their holdings in real-time.
     """
     try:
-        from fastapi import Request
         from supabase_client import supabase
         import re
         

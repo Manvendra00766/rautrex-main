@@ -2,7 +2,6 @@ import io
 import matplotlib
 matplotlib.use('Agg') # Use non-GUI backend
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -13,8 +12,6 @@ from typing import List, Dict, Any, Optional
 
 from services.portfolio_engine import get_portfolio_overview
 from services.risk_service import calculate_portfolio_risk
-from services.dcf_service import dcf_service
-from schemas.dcf_schema import DCFInput
 from supabase_client import supabase
 
 # Rautrex Colors

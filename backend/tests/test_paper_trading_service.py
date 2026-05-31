@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock, call
+from unittest.mock import patch, MagicMock
 from services.paper_trading_service import PaperTradingService, STARTING_CASH
 from schemas.paper_trading_schema import PlaceOrderRequest
 from fastapi import HTTPException

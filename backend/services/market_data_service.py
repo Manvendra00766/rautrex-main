@@ -1,9 +1,8 @@
 import asyncio
 import time
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import httpx
-from core.config import settings
 from core.logger import logger
 from core.exceptions import MarketDataError
 from infrastructure.cache import cache_response
@@ -11,7 +10,7 @@ from infrastructure.rate_limiter import TokenBucketRateLimiter
 
 from services.adapters.alpaca_adapter import AlpacaAdapter
 from services.adapters.upstox_adapter import UpstoxAdapter
-from services.adapters.oanda_adapter import OandaAdapter
+from services.adapters.twelvedata_adapter import TwelveDataAdapter
 
 class CircuitState(Enum):
     CLOSED = "CLOSED"
@@ -68,7 +67,7 @@ class MarketDataService:
         # Concrete adapters with isolated resource thread limits
         self.alpaca_adapter = AlpacaAdapter(executor=self.fallback_executor)
         self.upstox_adapter = UpstoxAdapter(executor=self.fallback_executor)
-        self.oanda_adapter = OandaAdapter(executor=self.fallback_executor)
+        self.twelvedata_adapter = TwelveDataAdapter(executor=self.fallback_executor)
         
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = TokenBucketRateLimiter(rate=5.0, capacity=5.0)
@@ -77,7 +76,7 @@ class MarketDataService:
         await self.client.aclose()
         await self.alpaca_adapter.client.aclose()
         await self.upstox_adapter.client.aclose()
-        await self.oanda_adapter.client.aclose()
+        await self.twelvedata_adapter.client.aclose()
         # Shutdown the thread pool executor cleanly
         self.fallback_executor.shutdown(wait=False)
 
@@ -89,9 +88,9 @@ class MarketDataService:
             return self.upstox_adapter
             
         # Rule B: Commodities (matching GC=F, CL=F, SI=F, NG=F, BZ=F or CFDs)
-        commodities = {"GC=F", "CL=F", "SI=F", "NG=F", "BZ=F", "XAU_USD", "XAG_USD", "WTICO_USD", "BCO_USD"}
+        commodities = {"GC=F", "CL=F", "SI=F", "NG=F", "BZ=F", "XAU_USD", "XAG_USD", "WTICO_USD", "BCO_USD", "GOLD"}
         if symbol_upper in commodities:
-            return self.oanda_adapter
+            return self.twelvedata_adapter
             
         # Rule C: Default US equities
         return self.alpaca_adapter

@@ -1,9 +1,7 @@
-import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.sql import func
 
 from core.logger import logger
 from models.user_data import Instrument

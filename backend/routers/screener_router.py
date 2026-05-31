@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
-from schemas.screener_schema import ScreenerRequest, ScreenerResult, ScreenerFilter, ScreenerPreset, ScreenerFilterRequest, ScreenerStockResult
+from schemas.screener_schema import ScreenerRequest, ScreenerResult, ScreenerFilter, ScreenerPreset, ScreenerFilterRequest
 from services.screener_service import screener_service
 from auth import get_current_user
-from supabase_client import supabase
 from pydantic import BaseModel
 from core.logger import logger
 

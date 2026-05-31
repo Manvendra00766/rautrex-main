@@ -47,7 +47,7 @@ async def run_simulation(
         return results
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
+    except Exception:
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal simulation error")

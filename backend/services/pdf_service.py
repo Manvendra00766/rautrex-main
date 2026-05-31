@@ -3,7 +3,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
 from reportlab.lib import colors
-import uuid, os
+import uuid
+import os
 
 def generate_dcf_report(valuation_data: dict) -> tuple:
     report_id = str(uuid.uuid4())

@@ -1,9 +1,8 @@
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime, timezone
 
 from database.connection import Base
 from models.user_data import Instrument

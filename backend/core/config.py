@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     # Market Data
     MARKET_DATA_PROVIDER_URL: str = os.getenv("MARKET_DATA_PROVIDER_URL", "")
     MARKET_DATA_API_KEY: str = os.getenv("MARKET_DATA_API_KEY", "")
+    TWELVEDATA_API_KEY: str = os.getenv("TWELVEDATA_API_KEY", "7493511a840640668d9da99c8189a22d")
     FALLBACK_MARKET_DATA_URL: str = os.getenv("FALLBACK_MARKET_DATA_URL", "")
     FALLBACK_API_KEY: str = os.getenv("FALLBACK_API_KEY", "")
 

@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import Depends, HTTPException, Header
+from fastapi import HTTPException, Header
 from supabase_client import supabase, SUPABASE_URL, SUPABASE_ANON_KEY
 from supabase import create_client
 from cachetools import TTLCache

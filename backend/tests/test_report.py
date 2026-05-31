@@ -1,7 +1,5 @@
 import pytest
 import pytest_asyncio
-import io
-import pandas as pd
 from unittest.mock import patch, MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
 from main import app

@@ -1,6 +1,6 @@
 import functools
 import json
-from typing import Callable, Any
+from typing import Callable
 from fastapi.encoders import jsonable_encoder
 from .redis_client import redis_client
 from core.logger import logger

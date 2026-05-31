@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from supabase_client import supabase
 from utils import safe_json
 from services.portfolio_service import (
     optimize_portfolio_logic, 
@@ -13,6 +12,9 @@ from services.portfolio_service import (
 from services.portfolio_engine import create_transaction, get_portfolio_overview
 from services.validation_service import validate_financial_metrics
 from auth import get_current_user
+from sqlalchemy.ext.asyncio import AsyncSession
+from database.connection import get_db
+from services.ticker_resolver import ticker_resolver_service
 
 router = APIRouter()
 
@@ -118,9 +120,16 @@ async def reconcile_explain(
 @router.post("/transactions")
 async def add_portfolio_transaction(
     req: PortfolioTransactionCreate,
+    db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     try:
+        if req.symbol:
+            resolved = await ticker_resolver_service.resolve(req.symbol, db)
+            if not resolved:
+                raise HTTPException(status_code=400, detail=f"Could not resolve company name or ticker: '{req.symbol}'")
+            req.symbol = resolved
+
         portfolio_check = current_user.db.table("portfolios").select("user_id").eq("id", req.portfolio_id).single().execute()
         if not portfolio_check.data or portfolio_check.data.get("user_id") != current_user.id:
             raise HTTPException(status_code=403, detail="Unauthorized")
