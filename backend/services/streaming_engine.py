@@ -64,13 +64,13 @@ class MarketStreamingEngine:
 
     async def _fetch_prices_yfinance(self, tickers: list) -> Dict[str, Dict[str, Any]]:
         """Fetch current prices for a batch of tickers using yfinance and pricing_engine fallbacks."""
-        # Separate G-Sec/Government debt tickers from standard tickers
-        gsec_tickers = []
+        # Separate G-Sec/Government debt and Indian equities from standard US tickers
+        indian_tickers = []
         standard_tickers = []
         for t in tickers:
             t_upper = t.upper()
-            if "GS" in t_upper or "GB" in t_upper or "709GS" in t_upper:
-                gsec_tickers.append(t)
+            if "GS" in t_upper or "GB" in t_upper or "709GS" in t_upper or t_upper.endswith(".NS") or t_upper.endswith(".BO"):
+                indian_tickers.append(t)
             else:
                 standard_tickers.append(t)
 
@@ -93,6 +93,17 @@ class MarketStreamingEngine:
                             info = ticker_obj.info or {}
                             price = info.get("regularMarketPrice") or info.get("currentPrice")
                             prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+                            
+                            # Robust fallback: if info is rate-limited or fails, try history(period="2d")
+                            if price is None:
+                                try:
+                                    hist = ticker_obj.history(period="2d")
+                                    if not hist.empty:
+                                        price = float(hist["Close"].iloc[-1])
+                                        prev_close = float(hist["Close"].iloc[-2]) if len(hist) > 1 else price
+                                except Exception as hist_err:
+                                    logger.warning(f"Streaming: yfinance history fallback failed for {t}: {hist_err}")
+                                    
                             if price is not None:
                                 change_amount = (price - prev_close) if prev_close else 0.0
                                 change_percent = ((change_amount / prev_close) * 100) if prev_close and prev_close != 0 else 0.0
@@ -119,12 +130,12 @@ class MarketStreamingEngine:
             yfinance_results = await loop.run_in_executor(None, _fetch)
             results.update(yfinance_results)
 
-        # 2. Fetch G-Sec tickers from pricing_engine
-        if gsec_tickers:
+        # 2. Fetch G-Sec and Indian tickers from pricing_engine (using Upstox batch API and database cache)
+        if indian_tickers:
             try:
                 from services.pricing_engine import get_batch_price_snapshots
-                snapshots = await get_batch_price_snapshots(gsec_tickers, max_age_seconds=10)
-                for t in gsec_tickers:
+                snapshots = await get_batch_price_snapshots(indian_tickers, max_age_seconds=10)
+                for t in indian_tickers:
                     snap = snapshots.get(t)
                     if snap:
                         results[t] = {
@@ -135,14 +146,14 @@ class MarketStreamingEngine:
                             "volume": snap.volume,
                             "name": snap.name or t,
                             "currency": snap.currency or "INR",
-                            "exchange": snap.exchange or "NSE_GS",
-                            "sector": "Government Securities",
+                            "exchange": snap.exchange or "NSE",
+                            "sector": snap.sector or "Indian Equity",
                             "country": snap.country or "IN",
                             "market_cap": snap.market_cap,
                             "timestamp": snap.fetched_at.isoformat() if hasattr(snap.fetched_at, "isoformat") else datetime.now(tz=UTC).isoformat()
                         }
             except Exception as e:
-                logger.error(f"Streaming: pricing_engine G-Sec fetch failed: {e}")
+                logger.error(f"Streaming: pricing_engine G-Sec/Indian assets fetch failed: {e}")
 
         return results
 
