@@ -522,7 +522,7 @@ export default function PortfolioLab() {
                   <div className="h-[320px] w-full" style={{ minHeight: '320px' }}>
                     {isMounted ? (
                       <ChartWrapper height={300}>
-                        <ResponsiveContainer width="100%" height="100%" aspect={2.5}>
+                        <ResponsiveContainer width="100%" height="100%" aspect={2.5} minWidth={1} minHeight={1}>
                           <AreaChart data={overview.equity_curve}>
                             <defs>
                               <linearGradient id="portfolioEquity" x1="0" y1="0" x2="0" y2="1">
@@ -552,7 +552,7 @@ export default function PortfolioLab() {
                   <div className="h-[260px] w-full" style={{ minHeight: '260px' }}>
                     {isMounted ? (
                       <ChartWrapper height={300}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                           <PieChart>
                             <Pie data={allocation?.by_sector || []} dataKey="value" nameKey="label" innerRadius={50} outerRadius={86} stroke="none">
                               {(allocation?.by_sector || []).map((_, index) => (
@@ -702,7 +702,7 @@ export default function PortfolioLab() {
                       <div className="xl:col-span-8 h-[420px]" style={{ minHeight: '420px' }}>
                         {isMounted ? (
                           <ChartWrapper height={300}>
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                               <ScatterChart>
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                 <XAxis type="number" dataKey="volatility" stroke="var(--text-muted)" tickFormatter={(value) => `${(value * 100).toFixed(1)}%`} />
