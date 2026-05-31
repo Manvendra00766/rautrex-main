@@ -376,9 +376,7 @@ export default function RedesignedDashboard() {
 
   // --- CHART DATA ---
   const chartData = useMemo(() => {
-    console.log('equityCurve from API:', equityCurve?.length, JSON.stringify(equityCurve?.slice(0, 2)))
     const filtered = filterEquityCurve(equityCurve, chartFilter)
-    console.log('chartData after filter:', filtered?.length, JSON.stringify(filtered?.slice(0, 2)))
     return filtered
   }, [equityCurve, chartFilter])
 
@@ -892,7 +890,7 @@ export default function RedesignedDashboard() {
               {/* Recharts Area Chart with real equity curve data */}
               <div className="flex-1 w-full min-h-[250px] relative">
                 {hasChartData ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <AreaChart 
                       data={chartData} 
                       margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
@@ -1174,7 +1172,7 @@ export default function RedesignedDashboard() {
                       {/* Real Recharts LineChart Sparkline */}
                       <div className="w-full h-10 my-3">
                         {pos.price_history && pos.price_history.length > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
+                          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                             <LineChart data={pos.price_history}>
                               <Line
                                 type="monotone"
@@ -1291,7 +1289,7 @@ export default function RedesignedDashboard() {
 
                   {/* Dynamic Projection Chart */}
                   <div className="w-20 h-16 bg-background border border-black rounded-lg p-2 shrink-0 flex items-center justify-center">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                       <LineChart data={[
                         { name: 'Now', value: portfolioValue },
                         { name: 'M1', value: portfolioValue + (expectedProjection - portfolioValue) * 0.33 },
@@ -1470,7 +1468,7 @@ export default function RedesignedDashboard() {
                         {/* Mini Sparkline or Dashed line if no history */}
                         <div className="w-10 h-4">
                           {item.price_history && item.price_history.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                               <LineChart data={item.price_history}>
                                 <Line type="monotone" dataKey="price" stroke={isPositive ? "#5F7055" : "#C85D5D"} strokeWidth={1.5} dot={false} />
                               </LineChart>
