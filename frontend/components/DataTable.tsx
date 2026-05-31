@@ -27,7 +27,7 @@ export function DataTable({ columns, data, onRowClick, loading }: DataTableProps
               <th
                 key={idx}
                 className={cn(
-                  "px-4 py-3 text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest",
+                  "px-4 py-3 text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest",
                   col.className
                 )}
               >

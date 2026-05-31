@@ -19,7 +19,7 @@ export const InputField = React.forwardRef<HTMLInputElement, InputFieldProps>(
           className={cn("bg-surface border-border text-[14px] text-text-primary h-10 shadow-sm", className)} 
           {...props} 
         />
-        {error && <span className="text-[10px] text-negative">{error}</span>}
+        {error && <span className="text-xs text-negative">{error}</span>}
       </div>
     );
   }

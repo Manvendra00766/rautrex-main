@@ -114,7 +114,7 @@ export default function RiskPage() {
             <ShieldAlert className="text-red-500" /> Portfolio Risk Audit
           </h1>
           {overview?.portfolio && (
-            <p className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold mt-1">
+            <p className="text-xs uppercase tracking-[0.2em] text-text-muted font-bold mt-1">
               {overview.portfolio.name}
             </p>
           )}
@@ -128,7 +128,7 @@ export default function RiskPage() {
           <Button 
             onClick={runRiskAnalysis} 
             loading={loading}
-            className="bg-accent hover:bg-accent/90 text-white gap-2 px-6 font-bold"
+            className="bg-accent hover:bg-accent/90 text-[var(--text-primary)] gap-2 px-6 font-bold"
           >
             {loading ? "AUDITING..." : <><Play size={16} fill="currentColor" /> RUN RISK AUDIT</>}
           </Button>
@@ -154,7 +154,7 @@ export default function RiskPage() {
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
                     <Label className="text-xs text-text-muted uppercase font-bold tracking-widest">Asset Allocation</Label>
-                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", totalWeight > 1.0 ? "bg-red-500/20 text-red-500" : "bg-accent/20 text-accent")}>
+                    <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", totalWeight > 1.0 ? "bg-red-500/20 text-red-500" : "bg-accent/20 text-accent")}>
                       TOTAL: {(totalWeight * 100).toFixed(1)}%
                     </span>
                   </div>
@@ -185,17 +185,17 @@ export default function RiskPage() {
                    <Label className="text-xs text-text-muted uppercase font-bold tracking-widest">Temporal scope</Label>
                    <div className="grid grid-cols-2 gap-4">
                      <div className="space-y-2">
-                       <p className="text-[10px] text-text-muted font-bold uppercase">Backfill Start</p>
+                       <p className="text-xs text-text-muted font-bold uppercase">Backfill Start</p>
                        <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-card h-10" />
                      </div>
                      <div className="space-y-2">
-                       <p className="text-[10px] text-text-muted font-bold uppercase">End Date</p>
+                       <p className="text-xs text-text-muted font-bold uppercase">End Date</p>
                        <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-card h-10" />
                      </div>
                    </div>
                    <div className="p-4 rounded-xl bg-muted/50 border border-border">
-                     <h4 className="text-[10px] font-bold text-text-muted uppercase mb-2">Methodology Note</h4>
-                     <p className="text-[10px] text-text-muted leading-relaxed italic">
+                     <h4 className="text-xs font-bold text-text-muted uppercase mb-2">Methodology Note</h4>
+                     <p className="text-xs text-text-muted leading-relaxed italic">
                         Risk metrics are calculated from the live transaction-backed portfolio, annualized on a 252-day basis, benchmarked to SPY, with a 95% historical VaR estimate.
                      </p>
                    </div>
@@ -273,7 +273,7 @@ export default function RiskPage() {
                         <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={10} minTickGap={100} />
                         <YAxis stroke="var(--text-muted)" fontSize={10} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
                         <Tooltip 
-                          contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px', fontSize: '12px' }}
+                          contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', fontSize: '12px' }}
                           itemStyle={{ color: 'var(--negative)' }}
                         />
                         <Area type="monotone" dataKey="drawdown" stroke="var(--negative)" fillOpacity={1} fill="url(#colorRisk)" strokeWidth={2} />
@@ -288,11 +288,11 @@ export default function RiskPage() {
                 <CardSurface className="p-6 flex flex-col h-[450px]">
                    <SectionHeader 
                         title="Asset Correlation Matrix" 
-                        className="text-[10px] uppercase tracking-widest mb-6"
+                        className="text-xs uppercase tracking-widest mb-6"
                    />
                    <div className="flex-1 grid grid-cols-3 grid-rows-3 gap-1">
                       {results.correlation_matrix.map((item: any, i: number) => (
-                        <div key={i} className="group relative flex items-center justify-center rounded-md text-[10px] font-mono font-bold" 
+                        <div key={i} className="group relative flex items-center justify-center rounded-md text-xs font-mono font-bold" 
                              style={{ backgroundColor: `rgba(0, 212, 255, ${Math.abs(item.v)})` }}>
                            <span className={cn(Math.abs(item.v) > 0.6 ? "text-black" : "text-text-primary/40 group-hover:text-text-primary")}>{item.v.toFixed(2)}</span>
                            {/* Hover Ticker Info */}
@@ -302,7 +302,7 @@ export default function RiskPage() {
                         </div>
                       ))}
                    </div>
-                   <div className="mt-4 flex justify-between items-center text-[10px] text-text-muted font-bold uppercase tracking-widest">
+                   <div className="mt-4 flex justify-between items-center text-xs text-text-muted font-bold uppercase tracking-widest">
                       <span>Low Corr</span>
                       <div className="flex-1 mx-4 h-1 rounded-full bg-gradient-to-r from-muted/50 to-accent" />
                       <span>High Corr</span>
@@ -322,7 +322,7 @@ export default function RiskPage() {
                       <div key={i} className="p-4 rounded-xl bg-card border border-border hover:border-border-strong transition-all">
                         <div className="flex justify-between items-start mb-2">
                           <div>
-                            <span className="text-[10px] font-bold text-accent uppercase tracking-widest">{scen.type}</span>
+                            <span className="text-xs font-bold text-accent uppercase tracking-widest">{scen.type}</span>
                             <h4 className="text-sm font-bold text-text-primary">{scen.name}</h4>
                           </div>
                           <div className={cn("text-lg font-mono font-bold", scen.your_portfolio_impact < 0 ? "text-red-500" : "text-green-500")}>
@@ -331,7 +331,7 @@ export default function RiskPage() {
                         </div>
                         <div className="flex gap-2 flex-wrap">
                            {(scen.most_affected_positions || []).slice(0, 3).map((pos: any, j: number) => (
-                             <span key={j} className="text-[9px] px-2 py-0.5 rounded bg-muted/50 text-text-muted">{pos.ticker}: {(pos.impact * 100).toFixed(1)}%</span>
+                             <span key={j} className="text-xs px-2 py-0.5 rounded bg-muted/50 text-text-muted">{pos.ticker}: {(pos.impact * 100).toFixed(1)}%</span>
                            ))}
                         </div>
                       </div>
@@ -347,7 +347,7 @@ export default function RiskPage() {
                   <div className="flex-1 space-y-6">
                     {factors && Object.entries(factors.betas).map(([factor, value]: [string, any], i: number) => (
                       <div key={i} className="space-y-2">
-                        <div className="flex justify-between text-[10px] font-bold uppercase">
+                        <div className="flex justify-between text-xs font-bold uppercase">
                           <span className="text-text-muted">{factor}</span>
                           <span className={cn(value > 1 ? "text-accent" : "text-text-primary")}>{value.toFixed(2)}</span>
                         </div>
@@ -362,7 +362,7 @@ export default function RiskPage() {
                     ))}
                   </div>
                   <div className="mt-8 p-4 rounded-xl bg-accent/5 border border-accent/10">
-                     <p className="text-[10px] text-text-muted leading-relaxed">
+                     <p className="text-xs text-text-muted leading-relaxed">
                         A Market Beta of <span className="text-text-primary font-bold">{factors?.betas.Market?.toFixed(2)}</span> indicates your portfolio is {Math.abs(factors?.betas.Market - 1) * 100}% {factors?.betas.Market > 1 ? 'more' : 'less'} volatile than the S&P 500.
                      </p>
                   </div>

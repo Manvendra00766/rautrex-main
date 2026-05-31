@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
   if (success) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="w-full max-w-md p-8 glass-panel rounded-2xl text-center space-y-4 bg-surface">
+        <div className="w-full max-w-md p-8 bg-card border border-black shadow-sm rounded-2xl text-center space-y-4 bg-card">
           <div className="mx-auto w-12 h-12 bg-accent/20 text-accent rounded-full flex items-center justify-center">
             <MailCheck size={24} />
           </div>
@@ -55,7 +55,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6 bg-surface">
+      <div className="w-full max-w-md p-8 bg-card border border-black shadow-sm rounded-2xl space-y-6 bg-card">
         <div className="space-y-2 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Reset Password</h1>
           <p className="text-text-muted">Enter your email to receive a reset link</p>
@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-surface border-border text-foreground"
+              className="bg-card border-border text-foreground"
             />
           </div>
 

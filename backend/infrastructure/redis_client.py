@@ -9,17 +9,20 @@ class RedisClient:
 
     async def connect(self):
         try:
-            self.redis = redis.from_url(
+            from redis.asyncio import BlockingConnectionPool
+            pool = BlockingConnectionPool.from_url(
                 settings.REDIS_URL,
                 encoding="utf-8",
                 decode_responses=True,
-                max_connections=10,
+                max_connections=100,
+                timeout=5.0,
                 socket_timeout=5.0,
                 socket_connect_timeout=5.0
             )
+            self.redis = redis.Redis(connection_pool=pool)
             # Ping to check connection
             await self.redis.ping()
-            logger.info("Connected to Redis successfully.")
+            logger.info("Connected to Redis successfully with BlockingConnectionPool (max_connections=100).")
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self.redis = None

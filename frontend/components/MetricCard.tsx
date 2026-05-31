@@ -45,13 +45,13 @@ export function MetricCard({
     )}>
       <div>
         <div className="flex justify-between items-start mb-2">
-          <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-[0.15em]">
+          <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-[0.15em]">
             {displayTitle}
           </span>
           {trend && change && (
             <div
               className={cn(
-                "px-2 py-0.5 rounded text-[10px] font-bold font-mono border",
+                "px-2 py-0.5 rounded text-xs font-bold font-mono border",
                 trend === "up" 
                   ? "bg-positive/10 text-positive border-positive/20" 
                   : "bg-negative/10 text-negative border-negative/20"
@@ -73,7 +73,7 @@ export function MetricCard({
       </div>
       
       {subtext && (
-        <span className="text-[11px] text-[var(--text-muted)] mt-3 font-medium">
+        <span className="text-xs text-[var(--text-muted)] mt-3 font-medium">
           {subtext}
         </span>
       )}

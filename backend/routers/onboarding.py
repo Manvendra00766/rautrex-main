@@ -7,6 +7,129 @@ from utils import safe_json
 from auth import get_current_user
 from services import db_service
 from services.portfolio_analyzer import analyze_portfolio
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from core.quant.portfolio_opt import PortfolioOptimizer
+from scipy.optimize import minimize
+import asyncio
+
+async def get_dynamic_mvo_allocation(profile: str, horizon: str) -> dict:
+    """
+    Downloads live proxy data, calculates return & covariance, 
+    and optimizes weights based on the user's risk profile and time horizon without blocking the thread pool.
+    """
+    tickers = {
+        "equity": "NIFTYBEES.NS",
+        "gold": "GOLDBEES.NS",
+        "debt": "LIQUIDBEES.NS"
+    }
+    
+    # Define fallback weights based on profile and horizon to preserve safety
+    fallback_weights = {
+        "Conservative": {"equity": 0.20, "debt": 0.70, "gold": 0.10},
+        "Moderate": {"equity": 0.50, "debt": 0.30, "gold": 0.20},
+        "Aggressive": {"equity": 0.75, "debt": 0.15, "gold": 0.10}
+    }
+    
+    try:
+        # Download 1y proxy index price data in thread pool
+        loop = asyncio.get_event_loop()
+        def download_data():
+            return yf.download(list(tickers.values()), period="1y", progress=False)["Close"]
+            
+        data = await loop.run_in_executor(None, download_data)
+        if data is None or data.empty:
+            logger.warning("[MVO Onboarding] Downloaded data is empty, using fallback static weights.")
+            return fallback_weights.get(profile)
+            
+        reverse_map = {v: k for k, v in tickers.items()}
+        data = data.rename(columns=reverse_map).dropna()
+    except Exception as e:
+        logger.error(f"[MVO Onboarding] Failed downloading proxy data: {e}. Using fallback static weights.")
+        return fallback_weights.get(profile)
+
+    try:
+        optimizer = PortfolioOptimizer()
+        expected_returns, cov_matrix = optimizer.calculate_returns_and_cov(data)
+        
+        # Base bounds setup (equity, debt, gold)
+        if profile == "Conservative":
+            eq_bounds = [0.15, 0.35]
+            db_bounds = [0.50, 0.75]
+            gd_bounds = [0.05, 0.15]
+            initial_guess = [0.25, 0.65, 0.10]
+        elif profile == "Aggressive":
+            eq_bounds = [0.65, 0.85]
+            db_bounds = [0.10, 0.25]
+            gd_bounds = [0.05, 0.15]
+            initial_guess = [0.75, 0.15, 0.10]
+        else:
+            eq_bounds = [0.40, 0.60]
+            db_bounds = [0.25, 0.45]
+            gd_bounds = [0.10, 0.20]
+            initial_guess = [0.50, 0.30, 0.20]
+            
+        # Adjust bounds based on time horizon
+        if horizon == "under_1_year":
+            eq_bounds = [0.0, 0.10]
+            db_bounds = [0.75, 0.90]
+            gd_bounds = [0.05, 0.15]
+            initial_guess = [0.05, 0.85, 0.10]
+        elif horizon == "3-7 years":
+            eq_bounds[1] = min(0.90, eq_bounds[1] + 0.05)
+            db_bounds[0] = max(0.05, db_bounds[0] - 0.05)
+        elif horizon == "7_years_plus":
+            eq_bounds[0] = min(0.95, eq_bounds[0] + 0.10)
+            eq_bounds[1] = min(0.95, eq_bounds[1] + 0.10)
+            db_bounds[0] = max(0.05, db_bounds[0] - 0.10)
+            db_bounds[1] = max(0.10, db_bounds[1] - 0.10)
+            gd_bounds[1] = max(0.05, gd_bounds[1] - 0.05)
+
+        num_assets = len(expected_returns)
+        constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+        
+        # Order of columns matching expected_returns index order
+        asset_order = list(expected_returns.index)
+        
+        # Create bounds array in correct index order
+        bounds_list = []
+        for asset in asset_order:
+            if asset == "equity":
+                bounds_list.append(tuple(eq_bounds))
+            elif asset == "debt":
+                bounds_list.append(tuple(db_bounds))
+            else:
+                bounds_list.append(tuple(gd_bounds))
+        bounds = tuple(bounds_list)
+        
+        # Generate initial guess in correct order
+        guess_map = {"equity": initial_guess[0], "debt": initial_guess[1], "gold": initial_guess[2]}
+        initial_guess_ordered = [guess_map[asset] for asset in asset_order]
+        
+        # Run SciPy SLSQP optimizer
+        if profile == "Conservative":
+            result = minimize(optimizer._minimize_volatility, initial_guess_ordered,
+                              args=(expected_returns, cov_matrix),
+                              method='SLSQP', bounds=bounds, constraints=constraints)
+        else:
+            result = minimize(optimizer._negative_sharpe, initial_guess_ordered,
+                              args=(expected_returns, cov_matrix),
+                              method='SLSQP', bounds=bounds, constraints=constraints)
+                              
+        if not result.success:
+            logger.warning(f"[MVO Onboarding] SLSQP solver failed: {result.message}. Using fallback.")
+            return fallback_weights.get(profile)
+            
+        optimized_weights = dict(zip(asset_order, result.x))
+        total_w = sum(optimized_weights.values())
+        cleaned_weights = {k: v / total_w for k, v in optimized_weights.items()}
+        logger.info(f"[MVO Onboarding] Computed optimized MVO weights: {cleaned_weights}")
+        return cleaned_weights
+        
+    except Exception as opt_err:
+        logger.error(f"[MVO Onboarding] Error in SLSQP optimization: {opt_err}. Using fallback.")
+        return fallback_weights.get(profile)
 
 router = APIRouter(tags=["Onboarding"])
 
@@ -53,16 +176,19 @@ async def onboarding_new_investor(data: NewInvestorOnboarding, current_user = De
         if isinstance(data.monthly_amount, (int, float)):
             amount = int(data.monthly_amount)
         elif isinstance(data.monthly_amount, str):
-            clean_str = data.monthly_amount.replace("₹", "").replace(",", "").strip()
-            if "under" in clean_str.lower() or ("500" in clean_str and len(clean_str) < 10):
+            clean_str = data.monthly_amount.replace("₹", "").replace(",", "").replace(" ", "").strip()
+            # Handle en-dash and standard hyphen
+            clean_str = clean_str.replace("–", "-")
+            
+            if "under500" in clean_str.lower() or clean_str == "500":
                 amount = 500
-            elif "500–2,000" in clean_str or "500-2,000" in clean_str or "500–2000" in clean_str or "500-2000" in clean_str:
+            elif "500-2000" in clean_str:
                 amount = 1000
-            elif "2,000–5,000" in clean_str or "2,000-5,000" in clean_str or "2000–5000" in clean_str or "2000-5000" in clean_str:
+            elif "2000-5000" in clean_str:
                 amount = 3500
-            elif "5,000–15,000" in clean_str or "5,000-15,000" in clean_str or "5000–15000" in clean_str or "5000-15000" in clean_str:
+            elif "5000-15000" in clean_str:
                 amount = 10000
-            elif "15,000+" in clean_str or "15000+" in clean_str:
+            elif "15000" in clean_str:
                 amount = 20000
             else:
                 import re
@@ -99,35 +225,28 @@ async def onboarding_new_investor(data: NewInvestorOnboarding, current_user = De
         elif "7+" in data.horizon or "long term" in data.horizon.lower() or "no rush" in data.horizon.lower():
             horizon = "7_years_plus"
 
-        # 3. Determine risk profile base weight allocation
+        # 3. Determine risk profile
+        profile = "Moderate"
         if reaction == "pullout" or tolerance == "safety":
             profile = "Conservative"
-            equity, debt, gold = 20, 70, 10
         elif reaction in ("calm", "buymore") and tolerance == "growth":
             profile = "Aggressive"
-            equity, debt, gold = 75, 15, 10
-        else:
-            profile = "Moderate"
-            equity, debt, gold = 50, 30, 20
 
-        # 4. Adjust for time horizon
-        if horizon == "under_1_year":
-            shift = min(20, equity)
-            equity -= shift
-            debt += shift
-        elif horizon == "3-7 years":
-            shift = min(10, debt)
-            debt -= shift
-            equity += shift
-        elif horizon == "7_years_plus":
-            shift = min(20, debt)
-            debt -= shift
-            equity += shift
-            remaining_shift = 20 - shift
-            if remaining_shift > 0:
-                gold_shift = min(remaining_shift, gold)
-                gold -= gold_shift
-                equity += gold_shift
+        # 4. Run Modern Portfolio Theory SLSQP quadratic solver on live correlations
+        opt_weights = await get_dynamic_mvo_allocation(profile, horizon)
+        equity = int(round(opt_weights.get("equity", 0.50) * 100))
+        debt = int(round(opt_weights.get("debt", 0.30) * 100))
+        gold = int(round(opt_weights.get("gold", 0.20) * 100))
+        
+        # Ensure exact 100% total allocation sum
+        diff_w = 100 - (equity + debt + gold)
+        if diff_w != 0:
+            if equity >= max(debt, gold):
+                equity += diff_w
+            elif debt >= max(equity, gold):
+                debt += diff_w
+            else:
+                gold += diff_w
 
         # 5. Calculate Rupee amounts & round to nearest ₹100
         eq_rupees = round((amount * equity / 100) / 100) * 100
@@ -524,6 +643,7 @@ async def onboarding_sync_demat(data: DematSyncRequest, current_user = Depends(g
         
         # Save imported portfolio immediately into DB to ensure dashboard is ready
         analysis = analyze_portfolio(holdings, None)
+        analysis["cash_balance"] = cash_balance
         await db_service.save_imported_portfolio(
             user_id=current_user.id,
             broker=broker_lower,
@@ -576,11 +696,100 @@ async def onboarding_analyze_portfolio(req: AnalyzePortfolioRequest, current_use
 async def onboarding_get_imported_portfolio(current_user = Depends(get_current_user)):
     """
     Retrieves the user's previously imported broker portfolio and analysis.
+    Dynamically refreshes prices using the multi-source pricing engine to reflect live market values.
     """
     try:
         portfolio = await db_service.get_imported_portfolio(current_user.id)
         if not portfolio:
-            raise HTTPException(status_code=404, detail="No imported portfolio found. Please sync your broker first.")
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=200, content=None)
+            
+        holdings = portfolio.get("holdings") or []
+        analysis = portfolio.get("analysis") or {}
+        
+        if holdings:
+            from services.pricing_engine import get_batch_price_snapshots
+            tickers = [h.get("ticker") for h in holdings if h.get("ticker")]
+            if tickers:
+                price_map = await get_batch_price_snapshots(tickers)
+                
+                # Update holding-level telemetry with live price feeds
+                for h in holdings:
+                    ticker = h.get("ticker")
+                    quote = price_map.get(ticker)
+                    if quote:
+                        h["current_price"] = float(quote.last_price)
+                        h["current_value"] = round(h["shares"] * quote.last_price, 2)
+                        h["pnl"] = round(h["current_value"] - h["total_invested"], 2)
+                        h["pnl_pct"] = round((h["pnl"] / h["total_invested"] * 100.0), 2) if h["total_invested"] > 0 else 0.0
+                        h["no_live_price"] = False
+                    else:
+                        h["no_live_price"] = True
+                        
+                # Recalculate portfolio-level aggregates
+                total_invested = sum(h.get("total_invested", 0.0) for h in holdings)
+                current_value = sum(h.get("current_value", 0.0) for h in holdings)
+                overall_pnl = current_value - total_invested
+                overall_pnl_pct = (overall_pnl / total_invested * 100.0) if total_invested > 0 else 0.0
+                
+                analysis["total_invested"] = round(total_invested, 2)
+                analysis["current_value"] = round(current_value, 2)
+                analysis["overall_pnl"] = round(overall_pnl, 2)
+                analysis["overall_pnl_pct"] = round(overall_pnl_pct, 2)
+                
+                # Recalculate sector concentration values dynamically
+                sector_concentration = {}
+                for h in holdings:
+                    sector = h.get("sector") or "Unknown"
+                    if sector not in sector_concentration:
+                        sector_concentration[sector] = {"value": 0.0, "pct": 0.0}
+                    sector_concentration[sector]["value"] += h.get("current_value", 0.0)
+                
+                for s, info in sector_concentration.items():
+                    info["value"] = round(info["value"], 2)
+                    info["pct"] = round(info["value"] / current_value * 100.0, 2) if current_value > 0 else 0.0
+                    
+                analysis["sector_concentration"] = sector_concentration
+                
+                # Recalculate asset type distribution
+                asset_type_distribution = {
+                    "equity": {"value": 0.0, "pct": 0.0},
+                    "mutual_fund": {"value": 0.0, "pct": 0.0},
+                    "etf": {"value": 0.0, "pct": 0.0},
+                    "gold": {"value": 0.0, "pct": 0.0},
+                    "debt": {"value": 0.0, "pct": 0.0},
+                    "other": {"value": 0.0, "pct": 0.0}
+                }
+                for h in holdings:
+                    atype = h.get("asset_type") or "equity"
+                    if atype not in asset_type_distribution:
+                        atype = "equity"
+                    asset_type_distribution[atype]["value"] += h.get("current_value", 0.0)
+                    
+                for t, info in asset_type_distribution.items():
+                    info["value"] = round(info["value"], 2)
+                    info["pct"] = round(info["value"] / current_value * 100.0, 2) if current_value > 0 else 0.0
+                    
+                analysis["asset_type_distribution"] = asset_type_distribution
+                
+                # Update top performers & underperformers dynamically
+                ranked = sorted(
+                    [h for h in holdings if h.get("avg_cost", 0.0) > 0],
+                    key=lambda x: x.get("pnl_pct", 0.0),
+                    reverse=True
+                )
+                analysis["top_performers"] = [
+                    {"ticker": r["ticker"], "name": r["name"], "pnl_pct": r["pnl_pct"], "pnl": r["pnl"]}
+                    for r in ranked[:3]
+                ]
+                analysis["underperformers"] = [
+                    {"ticker": r["ticker"], "name": r["name"], "pnl_pct": r["pnl_pct"], "pnl": r["pnl"]}
+                    for r in reversed(ranked[-3:])
+                ]
+                
+                portfolio["holdings"] = holdings
+                portfolio["analysis"] = analysis
+                
         return safe_json(portfolio)
     except HTTPException:
         raise
@@ -653,7 +862,7 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
         # 1. Fetch available cash margin from Upstox
         upstox_cash = None
         try:
-            funds_url = "https://api.upstox.com/v2/user/fund-margin"
+            funds_url = "https://api.upstox.com/v2/user/get-funds-and-margin"
             funds_res = requests.get(funds_url, headers=headers, timeout=10)
             if funds_res.status_code == 200:
                 funds_data = funds_res.json().get("data") or {}
@@ -669,7 +878,19 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
         if holdings_res.status_code == 200:
             from supabase_client import supabase
             from datetime import datetime, timezone
+            from services.pricing_engine import get_batch_price_snapshots
+            
             upstox_holdings = holdings_res.json().get("data") or []
+            
+            # Batch fetch prices using the pricing engine
+            tickers = [f"{h.get('tradingsymbol')}.NS" for h in upstox_holdings]
+            price_map = {}
+            if tickers:
+                try:
+                    price_map = await get_batch_price_snapshots(tickers)
+                except Exception as p_err:
+                    logger.error(f"Failed to batch fetch prices during Upstox onboarding callback: {p_err}")
+            
             for h in upstox_holdings:
                 ticker = f"{h.get('tradingsymbol')}.NS"
                 shares = float(h.get("quantity") or 0.0)
@@ -679,35 +900,43 @@ async def upstox_callback(code: str, current_user = Depends(get_current_user)):
                 inst_type = h.get("instrument_type") or ""
                 no_live_price = False
                 
-                close_price = float(h.get("close_price") or 0.0)
-                last_price = float(h.get("last_price") or avg_cost)
-                
-                if inst_type == "GB" or exch == "NSE_GS" or "GS" in h.get("tradingsymbol", "") or "GB" in h.get("tradingsymbol", ""):
-                    instrument_key = h.get("instrument_token") or f"NSE_EQ|{h.get('isin')}"
-                    try:
-                        quote_url = "https://api.upstox.com/v2/market-quote/quotes"
-                        quote_res = requests.get(
-                            quote_url,
-                            headers=headers,
-                            params={"instrument_key": instrument_key},
-                            timeout=10
-                        )
-                        if quote_res.status_code == 200:
-                            quote_dict = quote_res.json().get("data", {})
-                            quote_data = next(iter(quote_dict.values())) if quote_dict else None
-                            if quote_data:
-                                last_price = float(quote_data.get("last_price") or quote_data.get("last_traded_price") or last_price)
-                                close_price = float(quote_data.get("close") or quote_data.get("ohlc", {}).get("close") or close_price or last_price)
+                quote = price_map.get(ticker)
+                if quote:
+                    last_price = quote.last_price
+                    close_price = quote.previous_close or last_price
+                else:
+                    close_price = float(h.get("close_price") or 0.0)
+                    last_price = float(h.get("last_price") or avg_cost)
+                    
+                    if inst_type == "GB" or exch == "NSE_GS" or "GS" in h.get("tradingsymbol", "") or "GB" in h.get("tradingsymbol", ""):
+                        instrument_key = h.get("instrument_token") or f"NSE_EQ|{h.get('isin')}"
+                        try:
+                            quote_url = "https://api.upstox.com/v2/market-quote/quotes"
+                            quote_res = requests.get(
+                                quote_url,
+                                headers=headers,
+                                params={"instrument_key": instrument_key},
+                                timeout=10
+                            )
+                            if quote_res.status_code == 200:
+                                quote_dict = quote_res.json().get("data", {})
+                                quote_data = next(iter(quote_dict.values())) if quote_dict else None
+                                if quote_data:
+                                    last_price = float(quote_data.get("last_price") or quote_data.get("last_traded_price") or last_price)
+                                    close_price = float(quote_data.get("close") or quote_data.get("ohlc", {}).get("close") or close_price or last_price)
+                                else:
+                                    last_price = avg_cost
+                                    no_live_price = True
                             else:
                                 last_price = avg_cost
                                 no_live_price = True
-                        else:
+                        except Exception as quote_err:
+                            logger.error(f"Failed to fetch Upstox quote for {instrument_key}: {quote_err}")
                             last_price = avg_cost
                             no_live_price = True
-                    except Exception as quote_err:
-                        logger.error(f"Failed to fetch Upstox quote for {instrument_key}: {quote_err}")
-                        last_price = avg_cost
-                        no_live_price = True
+                    else:
+                        if last_price == avg_cost:
+                            no_live_price = True
                 
                 current_price = last_price
                 if close_price <= 0:
@@ -851,6 +1080,7 @@ async def email_inbound_webhook(req_raw: Request = None):
 async def upload_cas_statement(
     file: UploadFile = File(...),
     password: Optional[str] = Form(None),
+    cash_balance: Optional[float] = Form(0.0),
     current_user = Depends(get_current_user)
 ):
     """
@@ -876,6 +1106,9 @@ async def upload_cas_statement(
             
         # Run portfolio analysis
         analysis = analyze_portfolio(holdings, None)
+        
+        # Store uninvested cash balance securely inside analysis for correct NAV calculations
+        analysis["cash_balance"] = cash_balance if cash_balance is not None else 0.0
         
         # Save to DB (profile preferences and portfolios table)
         await db_service.save_imported_portfolio(

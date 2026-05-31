@@ -12,7 +12,7 @@
 | **Backend Stability** | **100.00%** | Load errors: 0/6600; Chaos: 6/6 recovered |
 | **Frontend Stability** | **N/A** | Requires browser-based testing (Playwright/Cypress); not measurable in this headless run |
 | **Security** | **100.00%** | 9/9 exploit vectors blocked |
-| **Performance** | **100.00%** | Worst-case avg latency: 15.75ms; Best throughput: 91 req/s |
+| **Performance** | **100.00%** | Worst-case avg latency: 6.52ms; Best throughput: 174 req/s |
 | **Data Integrity** | **100.00%** | Max weight sum deviation: 2.84e-14% |
 | **Deployment Readiness** | **100.00%** | Config files present: docker-compose.yml, railway.toml, render.yaml (3/3) |
 

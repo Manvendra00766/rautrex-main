@@ -77,6 +77,26 @@ class DCFService:
         return tv / ((1 + wacc) ** num_years)
 
     def fetch_current_price(self, ticker: str) -> Optional[float]:
+        # Try Upstox API first for Indian assets via the pricing engine
+        is_indian = ticker.endswith(".NS") or ticker.endswith(".BO") or "GS" in ticker or "GB" in ticker
+        if is_indian:
+            try:
+                import asyncio
+                from services.pricing_engine import get_batch_price_snapshots
+                
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                price_map = loop.run_until_complete(get_batch_price_snapshots([ticker]))
+                snap = price_map.get(ticker)
+                if snap and snap.last_price > 0:
+                    return float(snap.last_price)
+            except Exception as upstox_err:
+                logger.warning(f"[DCF] Upstox quote fetch failed for {ticker}: {upstox_err}. Falling back to yfinance.")
+
         stock = yf.Ticker(ticker)
 
         # Attempt 1: stock.info (comprehensive but slower, rate-limited)

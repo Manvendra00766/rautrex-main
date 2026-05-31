@@ -23,25 +23,14 @@ async def check_price_alerts():
     tickers = list(set([a['ticker'] for a in alerts]))
     
     try:
-        # Fetch current prices using yfinance
-        # Use a simpler fetch for multiple tickers
-        data = yf.download(tickers, period="1d", interval="1m", progress=False)
-        if data.empty:
-            logger.warning("No price data fetched for alerts.")
-            return
-            
+        from services.pricing_engine import get_batch_price_snapshots
+        price_map = await get_batch_price_snapshots(tickers)
+        
         current_prices = {}
         for ticker in tickers:
-            try:
-                if len(tickers) == 1:
-                    price = data['Close'].iloc[-1]
-                else:
-                    price = data['Close'][ticker].iloc[-1]
-                
-                if not pd.isna(price):
-                    current_prices[ticker] = float(price)
-            except Exception as e:
-                logger.error(f"Error extracting price for {ticker}: {e}")
+            snap = price_map.get(ticker)
+            if snap:
+                current_prices[ticker] = float(snap.last_price)
 
         for alert in alerts:
             ticker = alert['ticker']

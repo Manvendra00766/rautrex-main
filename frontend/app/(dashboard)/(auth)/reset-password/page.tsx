@@ -48,7 +48,7 @@ export default function ResetPasswordPage() {
   if (success) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="w-full max-w-md p-8 glass-panel rounded-2xl text-center space-y-4 bg-surface">
+        <div className="w-full max-w-md p-8 bg-card border border-black shadow-sm rounded-2xl text-center space-y-4 bg-card">
           <div className="mx-auto w-12 h-12 bg-positive/20 text-positive rounded-full flex items-center justify-center">
             <CheckCircle2 size={24} />
           </div>
@@ -63,7 +63,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6 bg-surface">
+      <div className="w-full max-w-md p-8 bg-card border border-black shadow-sm rounded-2xl space-y-6 bg-card">
         <div className="space-y-2 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">New Password</h1>
           <p className="text-text-muted">Enter your new secure password</p>
@@ -85,7 +85,7 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-surface border-border text-foreground pr-10"
+                className="bg-card border-border text-foreground pr-10"
               />
               <button
                 type="button"
@@ -104,7 +104,7 @@ export default function ResetPasswordPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="bg-surface border-border text-foreground"
+              className="bg-card border-border text-foreground"
             />
           </div>
 

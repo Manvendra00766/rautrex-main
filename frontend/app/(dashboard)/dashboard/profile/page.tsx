@@ -142,7 +142,7 @@ export default function ProfilePage() {
             <div className="flex justify-center mb-4">
               <div className="relative">
                 <Avatar className="h-24 w-24">
-                  <AvatarImage src={profile?.avatar_url} />
+                  {profile?.avatar_url && <AvatarImage src={profile.avatar_url} />}
                   <AvatarFallback>{user?.email?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <Label 

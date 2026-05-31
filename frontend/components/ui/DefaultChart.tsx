@@ -17,7 +17,7 @@ export const DefaultChart = () => {
   return (
     <div className="w-full h-full bg-surface rounded-2xl p-4 md:p-6 relative">
       <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-        <div className="bg-surface/60 backdrop-blur-md px-4 py-2 rounded-full border border-border text-[9px] md:text-xs font-bold text-muted tracking-wider">
+        <div className="bg-surface/60 backdrop-blur-md px-4 py-2 rounded-full border border-border text-xs md:text-xs font-bold text-muted tracking-wider">
           SAMPLE DATA — ENTER PARAMETERS TO RUN ANALYSIS
         </div>
       </div>

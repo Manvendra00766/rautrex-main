@@ -36,14 +36,9 @@ class PortfolioPositionRepository(BaseRepository[PortfolioPositionSchema]):
         return await self.get_all({"portfolio_id": portfolio_id})
 
     async def update_current_price(self, ticker: str, new_price: float):
-        try:
-            import asyncio
-            # Update all positions of this ticker globally (efficient batch update)
-            await asyncio.to_thread(
-                lambda: supabase.table(self.table_name).update({"current_price": new_price}).eq("ticker", ticker).execute()
-            )
-        except Exception as e:
-            logger.error(f"Failed to batch update position prices for {ticker}: {e}")
+        # The 'portfolio_positions' table does not have a 'current_price' column in the schema.
+        # Prices are dynamically resolved from 'market_cache' at query time.
+        pass
 
 portfolio_repo = PortfolioRepository()
 portfolio_position_repo = PortfolioPositionRepository()

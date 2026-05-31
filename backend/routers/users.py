@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     avatar_url: Optional[str] = None
+    preferences: Optional[dict] = None
 
 class PortfolioCreate(BaseModel):
     name: str

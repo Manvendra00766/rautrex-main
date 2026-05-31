@@ -3,6 +3,8 @@ import yfinance as yf
 import pandas as pd
 from typing import List, Dict, Optional
 import numpy as np
+import asyncio
+from core.logger import logger
 
 router = APIRouter()
 
@@ -15,9 +17,61 @@ def _normalize_ticker(ticker: str) -> str:
         )
     return symbol
 
+import requests
+
+@router.get("/search")
+async def search_stocks(q: str = Query(..., min_length=1)):
+    try:
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={q}&quotesCount=8&newsCount=0"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        loop = asyncio.get_event_loop()
+        res = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, timeout=5))
+        if res.status_code == 200:
+            data = res.json()
+            quotes = data.get("quotes", [])
+            results = []
+            for quote in quotes:
+                if quote.get("quoteType") in ["EQUITY", "ETF", "MUTUALFUND", "CURRENCY", "CRYPTOCURRENCY", "INDEX"]:
+                    results.append({
+                        "ticker": quote.get("symbol"),
+                        "name": quote.get("shortname") or quote.get("longname") or quote.get("symbol")
+                    })
+            return {"results": results}
+        return {"results": []}
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        return {"results": []}
+
 @router.get("/{ticker}/quote")
 async def get_quote(ticker: str):
     symbol = _normalize_ticker(ticker)
+    
+    # Try Upstox API first for Indian assets
+    is_indian = symbol.endswith(".NS") or symbol.endswith(".BO") or "GS" in symbol or "GB" in symbol
+    if is_indian:
+        try:
+            from services.pricing_engine import get_batch_price_snapshots
+            price_map = await get_batch_price_snapshots([symbol])
+            snap = price_map.get(symbol)
+            if snap:
+                raw = snap.raw or {}
+                ohlc = raw.get("ohlc") or {}
+                return {
+                    "ticker": symbol,
+                    "price": snap.last_price,
+                    "change": snap.change_amount,
+                    "change_percent": snap.change_percent,
+                    "open": ohlc.get("open") or snap.last_price,
+                    "high": ohlc.get("high") or snap.last_price,
+                    "low": ohlc.get("low") or snap.last_price,
+                    "volume": snap.volume or raw.get("volume"),
+                    "market_cap": snap.market_cap or raw.get("market_cap"),
+                    "currency": "INR",
+                    "exchange": snap.exchange or "NSE",
+                }
+        except Exception as upstox_err:
+            logger.warning(f"Upstox quote fetch failed for {symbol}: {upstox_err}. Falling back to yfinance.")
+
     try:
         stock = yf.Ticker(symbol)
         info = stock.info or {}
@@ -46,11 +100,43 @@ async def get_quote(ticker: str):
 @router.get("/{ticker}/info")
 async def get_info(ticker: str):
     symbol = _normalize_ticker(ticker)
+    
+    # We can fetch yfinance first (which has general info but could fail or be sparse)
+    info = {}
     try:
         stock = yf.Ticker(symbol)
         info = stock.info or {}
-        if not info:
-            raise HTTPException(status_code=404, detail=f"Info not found for {symbol}")
+    except Exception as yf_err:
+        logger.warning(f"yfinance info fetch failed for {symbol}: {yf_err}")
+        
+    # If Indian ticker, let's enrich or fallback to Upstox pricing engine details!
+    is_indian = symbol.endswith(".NS") or symbol.endswith(".BO") or "GS" in symbol or "GB" in symbol
+    if is_indian:
+        try:
+            from services.pricing_engine import get_batch_price_snapshots
+            price_map = await get_batch_price_snapshots([symbol])
+            snap = price_map.get(symbol)
+            if snap:
+                if not info:
+                    info = {}
+                # Ensure fields are beautifully populated
+                if not info.get("longName") and not info.get("shortName"):
+                    info["longName"] = snap.name
+                if not info.get("sector"):
+                    info["sector"] = snap.sector
+                if not info.get("currency"):
+                    info["currency"] = "INR"
+                if not info.get("exchange"):
+                    info["exchange"] = snap.exchange or "NSE"
+                if not info.get("country"):
+                    info["country"] = "IN"
+        except Exception as upstox_err:
+            logger.warning(f"Upstox info enrichment failed for {symbol}: {upstox_err}")
+
+    if not info:
+        raise HTTPException(status_code=404, detail=f"Info not found for {symbol}")
+
+    try:
         return {
             "ticker": symbol,
             "name": info.get("longName") or info.get("shortName") or symbol,
@@ -71,6 +157,61 @@ async def get_info(ticker: str):
 @router.get("/{ticker}/history")
 async def get_history(ticker: str, period: str = Query(default="1mo")):
     symbol = _normalize_ticker(ticker)
+    
+    # Try Upstox API first for Indian assets
+    is_indian = symbol.endswith(".NS") or symbol.endswith(".BO") or "GS" in symbol or "GB" in symbol
+    if is_indian:
+        from services.pricing_engine import get_active_upstox_token
+        token = await get_active_upstox_token()
+        if token:
+            try:
+                import requests
+                from services.pricing_engine import resolve_upstox_keys, to_upstox_instrument_key
+                resolved_keys = await resolve_upstox_keys([symbol])
+                instrument_key = resolved_keys.get(symbol) or to_upstox_instrument_key(symbol)
+                
+                from datetime import date, timedelta
+                end_date = date.today()
+                if period == "1d": start_date = end_date - timedelta(days=1)
+                elif period == "5d": start_date = end_date - timedelta(days=5)
+                elif period in ["1mo", "1m"]: start_date = end_date - timedelta(days=30)
+                elif period in ["3mo", "3m"]: start_date = end_date - timedelta(days=90)
+                elif period in ["6mo", "6m"]: start_date = end_date - timedelta(days=180)
+                elif period == "1y": start_date = end_date - timedelta(days=365)
+                elif period == "5y": start_date = end_date - timedelta(days=365 * 5)
+                else: start_date = end_date - timedelta(days=30)
+                
+                to_str = end_date.isoformat()
+                from_str = start_date.isoformat()
+                
+                url = f"https://api.upstox.com/v2/historical-candle/{instrument_key}/day/{to_str}/{from_str}"
+                headers = {
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {token}"
+                }
+                
+                loop = asyncio.get_event_loop()
+                res = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, timeout=10))
+                if res.status_code == 200:
+                    candles = res.json().get("data", {}).get("candles") or []
+                    if candles:
+                        records = []
+                        # Upstox returns candles sorted by time descending, let's reverse them for chronological order
+                        for c in reversed(candles):
+                            date_str = c[0].split("T")[0]
+                            records.append({
+                                "date": date_str,
+                                "time": date_str,
+                                "open": float(c[1]),
+                                "high": float(c[2]),
+                                "low": float(c[3]),
+                                "close": float(c[4]),
+                                "volume": int(c[5]) if c[5] is not None else None,
+                            })
+                        return {"ticker": symbol, "period": period, "history": records, "data": records}
+            except Exception as upstox_err:
+                logger.warning(f"Upstox history fetch failed for {symbol}: {upstox_err}. Falling back to yfinance.")
+
     try:
         stock = yf.Ticker(symbol)
         hist = stock.history(period=period, auto_adjust=False)
@@ -108,9 +249,30 @@ async def get_history(ticker: str, period: str = Query(default="1mo")):
 @router.get("/{ticker}/fundamentals")
 async def get_fundamentals(ticker: str):
     symbol = _normalize_ticker(ticker)
+    info = {}
     try:
         stock = yf.Ticker(symbol)
         info = stock.info or {}
+    except Exception as e:
+        logger.warning(f"yfinance fundamentals fetch failed for {symbol}: {e}")
+        
+    is_indian = symbol.endswith(".NS") or symbol.endswith(".BO") or "GS" in symbol or "GB" in symbol
+    if is_indian:
+        try:
+            from services.pricing_engine import get_batch_price_snapshots
+            price_map = await get_batch_price_snapshots([symbol])
+            snap = price_map.get(symbol)
+            if snap:
+                raw = snap.raw or {}
+                if not info:
+                    info = {}
+                # Merge trailingPE / forwardPE if not present in yfinance or if yfinance failed
+                if not info.get("trailingPE") and raw.get("pe"):
+                    info["trailingPE"] = raw.get("pe")
+        except Exception as upstox_err:
+            logger.warning(f"Upstox fundamentals enrichment failed for {symbol}: {upstox_err}")
+
+    try:
         return {
             "ticker": symbol,
             "pe_ratio": info.get("trailingPE"),

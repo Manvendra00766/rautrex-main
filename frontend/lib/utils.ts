@@ -9,6 +9,11 @@ export function formatError(err: any): string {
   if (!err) return 'An unknown error occurred';
   if (typeof err === 'string') return err;
   
+  // Handle browser Event or ErrorEvent instances cleanly to avoid [object Event]
+  if (typeof window !== 'undefined' && err instanceof Event) {
+    return `Browser ${err.type || 'Event'} error`;
+  }
+
   // Extract detail from Axios or fetch-like error structures
   const detail = err?.response?.data?.detail || err?.detail || err?.message || err;
   
@@ -21,8 +26,16 @@ export function formatError(err: any): string {
     }).join('; ');
   }
   
+  if (detail instanceof Error) {
+    return detail.message;
+  }
+  
   if (typeof detail === 'object' && detail !== null) {
-    return JSON.stringify(detail);
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
   }
   
   return String(detail);

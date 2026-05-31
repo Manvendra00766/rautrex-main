@@ -27,7 +27,7 @@ export default function MetricCard({ title, value, icon, trend, trendColor, clas
         </div>
       )}
       
-      <p className="text-[10px] md:text-xs font-bold text-muted uppercase tracking-widest">{title}</p>
+      <p className="text-xs md:text-xs font-bold text-muted uppercase tracking-widest">{title}</p>
       
       <div className="flex items-baseline gap-1 mt-1">
         <div className={cn("text-2xl md:text-3xl font-black text-foreground tracking-tight font-mono", valueClassName)}>
@@ -36,7 +36,7 @@ export default function MetricCard({ title, value, icon, trend, trendColor, clas
       </div>
       
       {trend && (
-        <p className={cn("text-[10px] md:text-xs font-mono font-bold mt-2", trendColor || "text-secondary")}>
+        <p className={cn("text-xs md:text-xs font-mono font-bold mt-2", trendColor || "text-secondary")}>
           {trend}
         </p>
       )}

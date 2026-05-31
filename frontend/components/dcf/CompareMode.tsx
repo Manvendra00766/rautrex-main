@@ -150,7 +150,7 @@ export default function CompareMode() {
         <Card className="glass-panel border-white/5 bg-[#0d0d14]">
           <CardHeader className="pb-4 flex flex-row items-center justify-between">
             <CardTitle className="text-sm uppercase tracking-widest text-accent">Stock B</CardTitle>
-            <Button variant="ghost" size="sm" className="h-7 text-[10px] text-gray-500 hover:text-white" onClick={handleApplyAtoB}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs text-gray-500 hover:text-white" onClick={handleApplyAtoB}>
               <ArrowRightLeft size={12} className="mr-1" /> Use A's Assumptions
             </Button>
           </CardHeader>
@@ -215,12 +215,12 @@ export default function CompareMode() {
 
           {/* Relative Upside Bar */}
           <div className="glass-panel p-6 rounded-2xl bg-[#0d0d14]">
-            <h4 className="text-[10px] uppercase font-bold text-gray-500 mb-4 tracking-widest text-center">Relative Upside Comparison</h4>
+            <h4 className="text-xs uppercase font-bold text-gray-500 mb-4 tracking-widest text-center">Relative Upside Comparison</h4>
             <div className="flex h-4 w-full rounded-full overflow-hidden bg-white/5">
               <UpsideBarPart ticker={compareResult.output_a.ticker} upside={compareResult.output_a.upside_downside_pct || 0} />
               <UpsideBarPart ticker={compareResult.output_b.ticker} upside={compareResult.output_b.upside_downside_pct || 0} />
             </div>
-            <div className="flex justify-between mt-2 text-[10px] font-bold">
+            <div className="flex justify-between mt-2 text-xs font-bold">
               <span className="text-primary">{compareResult.output_a.ticker} ({(compareResult.output_a.upside_downside_pct! * 100).toFixed(1)}%)</span>
               <span className="text-accent">{compareResult.output_b.ticker} ({(compareResult.output_b.upside_downside_pct! * 100).toFixed(1)}%)</span>
             </div>
@@ -251,11 +251,11 @@ function ResultCard({ output }: { output: DCFOutput }) {
           <span className={`text-3xl font-black ${output.intrinsic_value_per_share < 0 ? 'text-red-500' : 'text-white'}`}>
             {output.intrinsic_value_per_share.toLocaleString(locale, { style: 'currency', currency: output.currency })}
           </span>
-          <span className="text-[10px] text-gray-500">Market: {output.current_market_price?.toLocaleString(locale, { style: 'currency', currency: output.currency }) || 'N/A'}</span>
+          <span className="text-xs text-gray-500">Market: {output.current_market_price?.toLocaleString(locale, { style: 'currency', currency: output.currency }) || 'N/A'}</span>
         </div>
 
         {hasNegativeFCF && (
-          <div className="mb-4 p-2 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-[10px] text-red-500 font-bold uppercase tracking-tight">
+          <div className="mb-4 p-2 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-xs text-red-500 font-bold uppercase tracking-tight">
             <AlertTriangle size={12} />
             ⚠ Negative FCF Warning
           </div>
@@ -263,10 +263,10 @@ function ResultCard({ output }: { output: DCFOutput }) {
         
         {output.warnings && output.warnings.length > 0 && (
            <div className="mb-4 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-             <div className="flex items-center gap-1 text-yellow-500 text-[10px] font-bold uppercase mb-1">
+             <div className="flex items-center gap-1 text-yellow-500 text-xs font-bold uppercase mb-1">
                <AlertTriangle size={10} /> Data Quality: {output.data_quality_score}
              </div>
-             <ul className="list-disc pl-4 text-[9px] text-yellow-500/80 space-y-0.5">
+             <ul className="list-disc pl-4 text-xs text-yellow-500/80 space-y-0.5">
                {output.warnings.slice(0, 2).map((w, i) => <li key={i} className="truncate">{w}</li>)}
                {output.warnings.length > 2 && <li>+ {output.warnings.length - 2} more...</li>}
              </ul>
@@ -293,7 +293,7 @@ function ResultCard({ output }: { output: DCFOutput }) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 text-[10px]">
+        <div className="grid grid-cols-2 gap-4 text-xs">
           <div>
             <span className="text-gray-500 uppercase font-bold block">Enterprise Value</span>
             <span className="text-white font-black">{output.enterprise_value.toLocaleString(locale)} {unit}</span>

@@ -204,13 +204,13 @@ export default function NotificationBell() {
     }
 
     return (
-      <div className="max-h-[400px] overflow-auto divide-y divide-white/5">
+      <div className="max-h-[400px] overflow-auto divide-y divide-[var(--border)]">
         {filtered.map((n) => (
           <div
             key={n.id}
             onClick={() => !n.is_read && markRead(n.id)}
             className={cn(
-              "p-4 hover:bg-white/5 transition-colors cursor-pointer relative group",
+              "p-4 hover:bg-[var(--bg-secondary)] transition-colors cursor-pointer relative group",
               !n.is_read && "bg-accent/5"
             )}
           >
@@ -219,14 +219,14 @@ export default function NotificationBell() {
               <div className="shrink-0 mt-1">{getIcon(n.type)}</div>
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start gap-2">
-                  <h4 className={cn("text-xs font-bold truncate", n.is_read ? "text-gray-400" : "text-white")}>
+                  <h4 className={cn("text-xs font-bold truncate", n.is_read ? "text-gray-400" : "text-[var(--text-primary)]")}>
                     {n.title}
                   </h4>
-                  <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
                     {n.created_at ? formatDistanceToNow(new Date(n.created_at), { addSuffix: true }) : ''}
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-500 line-clamp-2 mt-0.5 leading-relaxed">
+                <p className="text-xs text-gray-500 line-clamp-2 mt-0.5 leading-relaxed">
                   {n.body}
                 </p>
               </div>
@@ -246,25 +246,25 @@ export default function NotificationBell() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="text-gray-400 hover:text-white relative p-2 rounded-full hover:bg-white/5 transition-colors">
+        <button className="text-gray-400 hover:text-[var(--text-primary)] relative p-2 rounded-full hover:bg-[var(--bg-secondary)] transition-colors">
           <Bell size={20} />
           {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-accent text-[10px] font-bold text-white rounded-full flex items-center justify-center border-2 border-[#0a0a0f]">
+            <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-accent text-xs font-bold text-white rounded-full flex items-center justify-center border-2 border-[var(--bg-primary)]">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-0 bg-surface border-white/10 shadow-2xl overflow-hidden rounded-2xl" align="end">
-        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+      <PopoverContent className="w-96 p-0 bg-surface border border-[var(--border)] shadow-2xl overflow-hidden rounded-2xl" align="end">
+        <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-secondary)]">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
             Notifications {unreadCount > 0 && <span className="text-accent text-xs">({unreadCount} new)</span>}
           </h3>
           <Button 
             variant="ghost" 
             size="sm" 
             onClick={markAllRead} 
-            className="h-7 text-[10px] font-bold gap-1.5 text-accent hover:text-accent hover:bg-accent/10"
+            className="h-7 text-xs font-bold gap-1.5 text-accent hover:text-accent hover:bg-accent/10"
             disabled={unreadCount === 0}
           >
             <Check size={12} /> MARK ALL AS READ
@@ -272,12 +272,12 @@ export default function NotificationBell() {
         </div>
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="w-full bg-transparent border-b border-white/5 rounded-none h-10 px-2 justify-start gap-4">
-            <TabsTrigger value="all" className="text-[10px] uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">All</TabsTrigger>
-            <TabsTrigger value="signals" className="text-[10px] uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">Signals</TabsTrigger>
-            <TabsTrigger value="prices" className="text-[10px] uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">Prices</TabsTrigger>
-            <TabsTrigger value="portfolio" className="text-[10px] uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">Portfolio</TabsTrigger>
-            <TabsTrigger value="system" className="text-[10px] uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">System</TabsTrigger>
+          <TabsList className="w-full bg-transparent border-b border-[var(--border)] rounded-none h-10 px-2 justify-start gap-4">
+            <TabsTrigger value="all" className="text-xs uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">All</TabsTrigger>
+            <TabsTrigger value="signals" className="text-xs uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">Signals</TabsTrigger>
+            <TabsTrigger value="prices" className="text-xs uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">Prices</TabsTrigger>
+            <TabsTrigger value="portfolio" className="text-xs uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">Portfolio</TabsTrigger>
+            <TabsTrigger value="system" className="text-xs uppercase font-bold data-[state=active]:bg-transparent data-[state=active]:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent rounded-none px-1 h-full border-b-2 border-transparent">System</TabsTrigger>
           </TabsList>
           
           <TabsContent value="all" className="mt-0">{renderNotifList()}</TabsContent>
@@ -287,8 +287,8 @@ export default function NotificationBell() {
           <TabsContent value="system" className="mt-0">{renderNotifList('system')}</TabsContent>
         </Tabs>
 
-        <div className="p-3 border-t border-white/5 bg-white/5 text-center">
-            <button className="text-[10px] font-bold text-gray-500 hover:text-white transition-colors uppercase tracking-widest">
+        <div className="p-3 border-t border-[var(--border)] bg-[var(--bg-secondary)] text-center">
+            <button className="text-xs font-bold text-gray-500 hover:text-[var(--text-primary)] transition-colors uppercase tracking-widest">
                 View All Activity
             </button>
         </div>

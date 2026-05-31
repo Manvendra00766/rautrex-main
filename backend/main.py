@@ -7,8 +7,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-# Initialize limiter
-limiter = Limiter(key_func=get_remote_address)
+# Initialize limiter with a strict default API rate limit
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 # Import core modules
 from core.config import settings
@@ -61,6 +61,23 @@ async def lifespan(app: FastAPI):
     # Startup: Redis connection
     await redis_client.connect()
     
+    # Startup: Calibrate NTP clock drift time offset
+    try:
+        from infrastructure.time_sync import calibrate_time_offset
+        await calibrate_time_offset()
+    except Exception as time_err:
+        logger.error(f"Error calibrating NTP time: {time_err}")
+    
+    # Initialize local SQLite database tables
+    try:
+        from database.connection import engine, Base
+        import models.user_data
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Local database tables initialized.")
+    except Exception as db_init_err:
+        logger.error(f"Error initializing database tables: {db_init_err}")
+        
     # Startup: Background Workers (Streaming Engine & Scheduler)
     from workers.scheduler import worker
     worker.start()

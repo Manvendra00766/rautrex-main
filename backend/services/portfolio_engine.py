@@ -330,6 +330,10 @@ def compute_portfolio_state(
 
     positions.sort(key=lambda x: x["market_value"], reverse=True)
 
+    overall_pnl = sum(p["market_value"] - p["cost_basis"] for p in positions)
+    total_invested = sum(p["cost_basis"] for p in positions)
+    overall_pnl_pct = (overall_pnl / total_invested * 100) if total_invested > 0 else 0.0
+
     return {
         "cash_balance": cash_balance,
         "total_market_value": total_market_value,
@@ -337,7 +341,104 @@ def compute_portfolio_state(
         "total_daily_pnl": total_daily_pnl,
         "positions": positions,
         "total_realized_pnl": sum(realized_pnl_by_symbol.values()),
+        "overall_pnl": overall_pnl,
+        "overall_pnl_pct": overall_pnl_pct,
     }
+
+
+def build_equity_curve_from_holdings(
+    holdings: List[Dict[str, Any]],
+    price_history: Dict[str, pd.Series],
+    start_date: date,
+    end_date: date,
+    cash_balance: float,
+) -> List[Dict[str, Any]]:
+    import numpy as np
+    # Pre-process price histories to ffill across dates
+    all_dates = pd.date_range(start=start_date, end=end_date, freq="D")
+    filled_prices: Dict[str, pd.Series] = {}
+    for ticker, series in price_history.items():
+        if series is not None and not series.empty:
+            try:
+                # Deduplicate index
+                series = series[~series.index.duplicated(keep="last")]
+                reindexed = series.reindex(pd.to_datetime(all_dates)).ffill().bfill()
+                filled_prices[ticker] = reindexed
+            except Exception as e:
+                print(f"Error preparing price history for {ticker}: {e}")
+
+    # Debug log to print first 3 candle values for any one ticker (Bug 1 Requirement)
+    if price_history:
+        first_ticker = list(price_history.keys())[0]
+        series = price_history[first_ticker]
+        if series is not None and not series.empty:
+            print(f"[DEBUG_LOG] First 3 candles for {first_ticker}:")
+            print(series.head(3))
+        else:
+            print(f"[DEBUG_LOG] Price history for {first_ticker} is empty or None")
+    else:
+        print("[DEBUG_LOG] price_history dictionary is empty")
+
+    curve: List[Dict[str, Any]] = []
+    
+    positions_info = []
+    for h in holdings:
+        # Robustly parse ticker and shares supporting both raw Upstox holdings and state["positions"] structure
+        ticker = h.get("ticker") or (f"{h.get('tradingsymbol')}.NS" if h.get("tradingsymbol") else None)
+        if not ticker:
+            continue
+        shares = float(h.get("shares") or h.get("quantity") or 0.0)
+        avg_cost = float(h.get("avg_cost_per_share") or h.get("average_price") or h.get("avg_cost") or 0.0)
+        if shares > 0:
+            positions_info.append({
+                "ticker": ticker,
+                "shares": shares,
+                "avg_cost": avg_cost
+            })
+
+    prev_nav = None
+    logged_first_pos = False
+    for idx, timestamp in enumerate(all_dates):
+        current_date = timestamp.date()
+        current_ts = pd.to_datetime(current_date)
+        
+        market_value = 0.0
+        for pos_idx, pos in enumerate(positions_info):
+            ticker = pos["ticker"]
+            shares = pos["shares"]
+            price = None
+            series = filled_prices.get(ticker)
+            if series is not None:
+                try:
+                    price = float(series.loc[current_ts])
+                except Exception:
+                    pass
+            if price is None or not np.isfinite(price):
+                price = pos["avg_cost"]
+            
+            # Debug log shares * price for the first position on the first date (Bug 1 Requirement)
+            if not logged_first_pos and idx == 0 and pos_idx == 0:
+                print(f"[DEBUG_LOG] First position first date: {ticker}, shares={shares}, price={price}, shares*price={shares * price}")
+                logged_first_pos = True
+                
+            market_value += shares * price
+            
+        nav = cash_balance + market_value
+        daily_pnl = 0.0
+        if prev_nav is not None:
+            daily_pnl = nav - prev_nav
+            
+        curve.append({
+            "snapshot_date": current_date.isoformat(),
+            "nav": round(nav, 2),
+            "cash_balance": round(cash_balance, 2),
+            "market_value": round(market_value, 2),
+            "daily_pnl": round(daily_pnl, 2),
+            "net_cash_flow": cash_balance if idx == 0 else 0.0,
+        })
+        prev_nav = nav
+        
+    return curve
 
 
 def build_equity_curve(
@@ -533,27 +634,65 @@ def build_equity_curve(
     return curve
 
 
-async def persist_historical_equity(user_id: str, portfolio_id: str, equity_curve: List[Dict[str, Any]]) -> None:
-    if not equity_curve:
+async def persist_historical_equity(
+    user_id: str,
+    portfolio_id: str,
+    curve: List[Dict[str, Any]],
+    live_nav: float = None,
+    live_market_value: float = None,
+    live_daily_pnl: float = None
+) -> None:
+    from datetime import date, timedelta
+    
+    # Exclude last 2 days from yfinance curve — prices not yet confirmed
+    cutoff = (date.today() - timedelta(days=2)).isoformat()
+    today = date.today().isoformat()
+
+    filtered = [p for p in curve if float(p.get("nav") or 0) > 0 and p["snapshot_date"] <= cutoff]
+    print(f"[DEBUG] cutoff={cutoff}, curve points={len(curve)}, after filter={len(filtered)}, live_nav={live_nav}")
+
+    payload = [
+        {
+            "user_id": user_id,
+            "portfolio_id": portfolio_id,
+            "snapshot_date": point["snapshot_date"],
+            "nav": round(float(point["nav"]), 2),
+            "cash_balance": round(float(point.get("cash_balance", 0.0)), 2),
+            "market_value": round(float(point.get("market_value", 0)), 2),
+            "daily_pnl": round(float(point.get("daily_pnl", 0)), 2),
+            "gross_exposure": round(float(point.get("market_value", 0)), 2),
+            "net_exposure": round(float(point.get("market_value", 0)), 2),
+        }
+        for point in filtered[-370:]
+    ]
+
+    # Inject today as a live Upstox point — not from yfinance
+    if live_nav and live_nav > 0:
+        live_cash = live_nav - (live_market_value or 0.0)
+        payload.append({
+            "user_id": user_id,
+            "portfolio_id": portfolio_id,
+            "snapshot_date": today,
+            "nav": round(float(live_nav), 2),
+            "cash_balance": round(float(live_cash), 2),
+            "market_value": round(float(live_market_value or 0), 2),
+            "daily_pnl": round(float(live_daily_pnl or 0), 2),
+            "gross_exposure": round(float(live_market_value or 0), 2),
+            "net_exposure": round(float(live_market_value or 0), 2),
+        })
+
+    if not payload:
+        print("persist_historical_equity: no valid points to write")
         return
-    payload = []
-    for row in equity_curve[-370:]:
-        payload.append(
-            {
-                "user_id": user_id,
-                "portfolio_id": portfolio_id,
-                "snapshot_date": row["snapshot_date"],
-                "nav": row["nav"],
-                "cash_balance": row["cash_balance"],
-                "market_value": row["market_value"],
-                "daily_pnl": row["daily_pnl"],
-                "gross_exposure": row["market_value"],
-                "net_exposure": row["market_value"],
-            }
-        )
+
     try:
-        supabase.table("historical_equity").upsert(payload).execute()
-    except Exception:
+        supabase.table("historical_equity").upsert(
+            payload,
+            on_conflict="portfolio_id,snapshot_date"
+        ).execute()
+        print(f"persist_historical_equity: wrote {len(payload)} rows")
+    except Exception as e:
+        print(f"persist_historical_equity failed: {e}")
         return
 
 
@@ -577,7 +716,7 @@ async def sync_portfolio_positions_snapshot(portfolio_id: str, positions: List[D
         return
 
 
-async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = None) -> Dict[str, Any]:
+async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = None, exclude_history: bool = False) -> Dict[str, Any]:
     portfolio = await get_portfolio_record(user_id, portfolio_id)
     if not portfolio:
         return {
@@ -598,15 +737,168 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         except Exception:
             pass
 
-    transactions = await load_transactions_for_portfolio(user_id, portfolio_id, portfolio_created_dt)
-    symbols = [tx["symbol"] for tx in transactions if tx.get("symbol")]
-    price_map = await get_batch_price_snapshots(symbols) if symbols else {}
     initial_cash = safe_float(portfolio.get("initial_cash", 0.0))
-    state = compute_portfolio_state(transactions, price_map, initial_cash)
 
-    history_end = _utcnow().date()
-    history_start = min((tx["executed_at"].date() for tx in transactions), default=history_end)
-    price_history = await get_price_history(symbols, history_start, history_end) if symbols else {}
+    # Check if this is an imported Upstox portfolio
+    portfolio_name = str(portfolio.get("name") or "").lower()
+    is_upstox_portfolio = "upstox" in portfolio_name and portfolio.get("strategy") == "Imported"
+    
+    upstox_holdings_raw = []
+    upstox_cash = None
+    upstox_auth_error = False
+    
+    if is_upstox_portfolio:
+        # Try to fetch fresh holdings directly from Upstox API
+        try:
+            profile_res = supabase.table("profiles").select("broker_oauth").eq("id", user_id).execute()
+            if profile_res.data:
+                oauth = profile_res.data[0].get("broker_oauth") or {}
+                token = oauth.get("access_token")
+                broker = str(oauth.get("broker") or "").lower()
+                
+                if token and broker == "upstox":
+                    import requests
+                    headers = {
+                        "Accept": "application/json",
+                        "Authorization": f"Bearer {token}"
+                    }
+                    
+                    # 1. Fetch available cash margin
+                    try:
+                        funds_url = "https://api.upstox.com/v2/user/get-funds-and-margin"
+                        loop = asyncio.get_event_loop()
+                        funds_res = await loop.run_in_executor(None, lambda: requests.get(funds_url, headers=headers, timeout=5))
+                        if funds_res.status_code == 200:
+                            funds_data = funds_res.json().get("data") or {}
+                            upstox_cash = float(funds_data.get("equity", {}).get("available_margin") or 0.0)
+                        elif funds_res.status_code == 401:
+                            upstox_auth_error = True
+                    except Exception as funds_err:
+                        print(f"Failed to fetch Upstox funds: {funds_err}")
+                        
+                    # 2. Fetch fresh holdings directly from Upstox holdings API
+                    holdings_url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
+                    loop = asyncio.get_event_loop()
+                    holdings_res = await loop.run_in_executor(None, lambda: requests.get(holdings_url, headers=headers, timeout=5))
+                    if holdings_res.status_code == 200:
+                        upstox_holdings_raw = holdings_res.json().get("data") or []
+                    elif holdings_res.status_code == 401:
+                        upstox_auth_error = True
+                else:
+                    upstox_auth_error = True
+            else:
+                upstox_auth_error = True
+        except Exception as upstox_err:
+            print(f"Failed to fetch Upstox holdings directly: {upstox_err}")
+            upstox_auth_error = True
+
+    if is_upstox_portfolio and upstox_holdings_raw:
+        # Feed the NAV engine straight from the Upstox holdings API source of truth
+        symbols = [f"{h.get('tradingsymbol')}.NS" for h in upstox_holdings_raw]
+        price_map = await get_batch_price_snapshots(symbols) if symbols else {}
+        
+        cash_balance = upstox_cash if upstox_cash is not None else safe_float(portfolio.get("cash_balance", 0.0))
+        
+        positions = []
+        total_market_value = 0.0
+        total_daily_pnl = 0.0
+        
+        for h in upstox_holdings_raw:
+            symbol = f"{h.get('tradingsymbol')}.NS"
+            shares = float(h.get("quantity") or 0.0)
+            avg_cost = float(h.get("average_price") or 0.0)
+            
+            if shares <= 0:
+                continue
+                
+            quote = price_map.get(symbol)
+            upstox_ltp = float(h.get("last_price") or 0.0)
+            live_price = upstox_ltp if upstox_ltp > 0 else (quote.last_price if quote else avg_cost)
+            
+            close = float(h.get("close_price") or 0)
+            avg = float(h.get("average_price") or 0)
+            
+            # Prioritize first-party close_price from Upstox, falling back to pricing engine
+            prev_close = close if close > 0 else (quote.previous_close if (quote and quote.previous_close and quote.previous_close > 0) else avg)
+            
+            market_value = shares * live_price
+            cost_basis = shares * avg_cost
+            unrealized_pnl = market_value - cost_basis
+            daily_pnl = shares * (live_price - prev_close)
+            
+            total_market_value += market_value
+            total_daily_pnl += daily_pnl
+            
+            positions.append({
+                "ticker": symbol,
+                "name": quote.name if quote else h.get("company_name") or symbol,
+                "asset_type": quote.asset_type if quote else "equity",
+                "sector": quote.sector if quote else "Unknown",
+                "country": quote.country if quote else "IN",
+                "shares": shares,
+                "avg_cost_per_share": avg_cost,
+                "live_price": live_price,
+                "previous_close": prev_close,
+                "cost_basis": cost_basis,
+                "market_value": market_value,
+                "unrealized_pnl": unrealized_pnl,
+                "realized_pnl": 0.0,
+                "daily_pnl": daily_pnl,
+                "total_return_pct": safe_div(unrealized_pnl, cost_basis) * 100 if cost_basis else 0.0,
+                "change_percent": safe_div(live_price - prev_close, prev_close) * 100 if prev_close else 0.0,
+            })
+            
+        total_nav = PortfolioCalculationService.calculate_nav(cash_balance, positions)
+        positions = PortfolioCalculationService.calculate_weights(positions)
+        total_daily_pnl = PortfolioCalculationService.calculate_daily_pnl(positions)
+        
+        positions.sort(key=lambda x: x["market_value"], reverse=True)
+        
+        overall_pnl = sum(p["market_value"] - p["cost_basis"] for p in positions)
+        total_invested = sum(p["cost_basis"] for p in positions)
+        overall_pnl_pct = (overall_pnl / total_invested * 100) if total_invested > 0 else 0.0
+        
+        state = {
+            "cash_balance": cash_balance,
+            "total_market_value": total_market_value,
+            "total_nav": total_nav,
+            "total_daily_pnl": total_daily_pnl,
+            "positions": positions,
+            "total_realized_pnl": 0.0,
+            "overall_pnl": overall_pnl,
+            "overall_pnl_pct": overall_pnl_pct,
+        }
+        
+        # Build synthetic buy transactions so the equity curve and charts can reconstruct history beautifully
+        position_rows = [
+            {
+                "ticker": p["ticker"],
+                "shares": p["shares"],
+                "avg_cost": p["avg_cost_per_share"],
+                "added_at": None,
+                "created_at": None
+            }
+            for p in positions
+        ]
+        transactions = [_coerce_transaction(tx) for tx in _synthesize_transactions(user_id, portfolio_id, position_rows, portfolio_created_dt)]
+        
+        history_end = _utcnow().date()
+        history_start = history_end - timedelta(days=90)
+        price_history = {} if exclude_history else (await get_price_history(symbols, history_start, history_end) if symbols else {})
+    else:
+        # Reconstruct shares quantity from local transaction ledger (Standard Fallback)
+        transactions = await load_transactions_for_portfolio(user_id, portfolio_id, portfolio_created_dt)
+        symbols = [tx["symbol"] for tx in transactions if tx.get("symbol")]
+        price_map = await get_batch_price_snapshots(symbols) if symbols else {}
+        initial_cash = safe_float(portfolio.get("initial_cash", 0.0))
+        state = compute_portfolio_state(transactions, price_map, initial_cash)
+
+        history_end = _utcnow().date()
+        if is_upstox_portfolio:
+            history_start = history_end - timedelta(days=90)
+        else:
+            history_start = min((tx["executed_at"].date() for tx in transactions), default=history_end)
+        price_history = {} if exclude_history else (await get_price_history(symbols, history_start, history_end) if symbols else {})
     
     # Enrich positions with risk metrics
     import numpy as np
@@ -667,20 +959,70 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         weight_pct = pos.get("weight_pct", 0.0)
         pos["risk_contribution"] = (weight_pct / 100.0) * beta
 
+        # 6. price_history (for sparklines)
+        pos_history = []
+        if series is not None and not series.empty:
+            try:
+                for date_idx, val in zip(series.index, series.values):
+                    if pd.notna(val) and np.isfinite(val):
+                        date_str = date_idx.strftime("%Y-%m-%d") if hasattr(date_idx, "strftime") else str(date_idx)
+                        pos_history.append({
+                            "date": date_str,
+                            "price": float(val)
+                        })
+            except Exception as e:
+                print(f"Error compiling sparkline history for {symbol}: {e}")
+        pos["price_history"] = pos_history
+
     portfolio_created_at = None
     if portfolio_created_dt:
         portfolio_created_at = portfolio_created_dt.date()
         
-    equity_curve = build_equity_curve(
-        transactions, 
-        price_history, 
-        history_end, 
-        initial_cash=initial_cash,
-        portfolio_created_at=portfolio_created_at,
-        price_map=price_map
-    )
-    await persist_historical_equity(user_id, portfolio_id, equity_curve)
-    await sync_portfolio_positions_snapshot(portfolio_id, state["positions"])
+    if exclude_history:
+        try:
+            hist_res = supabase.table("historical_equity").select("*").eq("portfolio_id", portfolio_id).order("snapshot_date", ascending=True).execute()
+            equity_curve = hist_res.data or []
+        except Exception as e:
+            print(f"Error fetching historical equity from DB: {e}")
+            equity_curve = []
+            
+        if not equity_curve:
+            today_str = _utcnow().date().isoformat()
+            equity_curve = [{
+                "snapshot_date": today_str,
+                "nav": state["total_nav"],
+                "cash_balance": state["cash_balance"],
+                "market_value": state["total_market_value"],
+                "daily_pnl": state["total_daily_pnl"],
+                "net_cash_flow": 0.0
+            }]
+    else:
+        if is_upstox_portfolio:
+            equity_curve = build_equity_curve_from_holdings(
+                state["positions"],
+                price_history,
+                history_start,
+                history_end,
+                state["cash_balance"]
+            )
+        else:
+            equity_curve = build_equity_curve(
+                transactions, 
+                price_history, 
+                history_end, 
+                initial_cash=initial_cash,
+                portfolio_created_at=portfolio_created_at,
+                price_map=price_map
+            )
+        await persist_historical_equity(
+            user_id,
+            portfolio_id,
+            equity_curve,
+            live_nav=state["total_nav"],
+            live_market_value=state["total_market_value"],
+            live_daily_pnl=state["total_daily_pnl"]
+        )
+        await sync_portfolio_positions_snapshot(portfolio_id, state["positions"])
 
     summary_metrics = compute_equity_metrics(
         equity_curve,
@@ -692,7 +1034,10 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
     
     beta_err = None
     try:
-        beta = await compute_beta_vs_benchmark(equity_curve, portfolio.get("benchmark_symbol") or "SPY")
+        if exclude_history:
+            beta = 1.0
+        else:
+            beta = await compute_beta_vs_benchmark(equity_curve, portfolio.get("benchmark_symbol") or "SPY")
     except Exception as e:
         print(f"Error calculating beta for portfolio {portfolio_id}: {e}")
         beta = None
@@ -709,6 +1054,8 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         "holdings_count": len(state["positions"]),
         "daily_pnl": state["total_daily_pnl"],
         "daily_return_pct": summary_metrics["daily_return_pct"],
+        "overall_pnl": state.get("overall_pnl", 0.0),
+        "overall_pnl_pct": state.get("overall_pnl_pct", 0.0),
         "mtd_return_pct": summary_metrics["mtd_return_pct"],
         "ytd_return_pct": summary_metrics["ytd_return_pct"],
         "gross_exposure": exposure["gross_exposure"],
@@ -732,11 +1079,25 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
     warnings = build_warnings(state["positions"], state["cash_balance"], state["total_nav"])
     if beta_err:
         warnings.append(beta_err)
+    if is_upstox_portfolio and upstox_auth_error:
+        warnings.append("Broker Token Expired: Please re-authenticate your Upstox account to sync live holdings and margin.")
 
     # FIXED: Return flat API contract root fields alongside legacy nested keys for Phase 3 compliance
     
     # Calculate detailed system alerts (Bug 7)
     alerts = []
+    if is_upstox_portfolio and upstox_auth_error:
+        alerts.append({
+            "id": "upstox_auth_error",
+            "type": "broker_auth_required",
+            "severity": "critical",
+            "title": "Broker Authentication Required",
+            "message": "Upstox API authentication failed. Displaying local transaction fallback data. Please re-authenticate your broker link to sync live holdings.",
+            "affected_asset": None,
+            "triggered_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "threshold": None,
+            "current_value": None
+        })
     # Concentration risk (> 70% weight)
     for pos in state["positions"]:
         weight = pos.get("weight_pct", 0.0)

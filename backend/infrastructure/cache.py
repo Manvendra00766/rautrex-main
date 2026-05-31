@@ -1,6 +1,7 @@
 import functools
 import json
 from typing import Callable, Any
+from fastapi.encoders import jsonable_encoder
 from .redis_client import redis_client
 from core.logger import logger
 
@@ -29,12 +30,13 @@ def cache_response(ttl: int = 60, prefix: str = "cache"):
             
             # Save to cache if successful
             if result is not None:
-                # Assuming result is serializable. In FastAPI, models often need to be dumped.
-                # Here we assume the result is dict-like or standard types
+                # Custom JSON serialization using FastAPI's jsonable_encoder to support
+                # SQLAlchemy models, datetimes, decimals, and custom enums.
                 try:
-                    await redis_client.set(cache_key, json.dumps(result), ttl)
-                except TypeError:
-                    logger.warning(f"Could not serialize result for cache key: {cache_key}")
+                    serialized = json.dumps(jsonable_encoder(result))
+                    await redis_client.set(cache_key, serialized, ttl)
+                except Exception as e:
+                    logger.warning(f"Could not serialize result for cache key: {cache_key}. Error: {e}")
                     
             return result
         return wrapper

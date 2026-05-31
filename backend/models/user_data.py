@@ -143,3 +143,33 @@ class PriceAlert(Base):
     triggered_at = Column(DateTime(timezone=True), nullable=True)
     
     user = relationship("User", back_populates="price_alerts")
+
+class CompanyTickerMapping(Base):
+    __tablename__ = "company_ticker_mappings"
+    user_query = Column(String, primary_key=True, index=True) # Cleaned user query (lowercase, trimmed)
+    resolved_ticker = Column(String, nullable=False, index=True) # Standard resolved ticker (e.g. AAPL)
+    confidence_score = Column(Float, default=1.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PortfolioMetricsCache(Base):
+    __tablename__ = "portfolio_metrics_cache"
+    portfolio_id = Column(String, primary_key=True, index=True) # Linked to portfolio UUID or ID string
+    sharpe_ratio = Column(Float, default=0.0)
+    max_drawdown = Column(Float, default=0.0)
+    value_at_risk = Column(Float, default=0.0)
+    beta = Column(Float, default=1.0)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Instrument(Base):
+    __tablename__ = "instruments"
+    
+    symbol = Column(String, primary_key=True, index=True) # e.g. AAPL, RELIANCE.NS
+    name = Column(String, nullable=False)
+    exchange = Column(String)
+    currency = Column(String, default="USD")
+    sector = Column(String)
+    asset_type = Column(String, default="equity") # equity, commodity, crypto
+    is_tracked = Column(Boolean, default=True) # If True, daily cron will sync this asset
+    last_synced_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

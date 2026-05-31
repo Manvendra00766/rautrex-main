@@ -32,7 +32,7 @@ export const TickerChip: React.FC<TickerChipProps> = ({
       <div className="flex items-center gap-2">
         <span className="font-mono font-bold text-white tracking-wider">{ticker}</span>
         {exchange && (
-          <span className="px-1.5 py-0.5 rounded bg-white/5 text-[10px] text-gray-500 font-bold">
+          <span className="px-1.5 py-0.5 rounded bg-white/5 text-xs text-gray-500 font-bold">
             {exchange}
           </span>
         )}

@@ -21,6 +21,51 @@ class BackgroundWorker:
             replace_existing=True
         )
         
+        # Schedule FXRateService poller every 5 minutes
+        from services.fx_service import fx_rate_service
+        self.scheduler.add_job(
+            self.safe_job(fx_rate_service.fetch_latest_rates),
+            'interval',
+            minutes=5,
+            id='poll_fx_rates',
+            replace_existing=True
+        )
+        
+        # Trigger an initial FX fetch immediately on server boot
+        asyncio.create_task(fx_rate_service.fetch_latest_rates())
+
+        # Schedule Offline Analytics Worker every 1 hour
+        self.scheduler.add_job(
+            self.safe_job(self.run_scheduled_analytics),
+            'interval',
+            hours=1,
+            id='run_analytics_worker',
+            replace_existing=True
+        )
+
+        # Schedule Daily Corporate Actions Ingestion daily at 4:00 AM IST
+        self.scheduler.add_job(
+            self.safe_job(self.run_scheduled_corporate_actions),
+            'cron',
+            hour=4,
+            minute=0,
+            timezone='Asia/Kolkata',
+            id='run_corporate_actions',
+            replace_existing=True
+        )
+
+        # Schedule Daily Database Checkpoint & Vacuum at 4:00 AM IST
+        from infrastructure.db_maintenance import run_db_vacuum
+        self.scheduler.add_job(
+            self.safe_job(run_db_vacuum),
+            'cron',
+            hour=4,
+            minute=0,
+            timezone='Asia/Kolkata',
+            id='db_maintenance_vacuum',
+            replace_existing=True
+        )
+        
         # Add a job to cleanup stale websocket channels or caches
         self.scheduler.add_job(
             self.safe_job(self.cleanup_task), 
@@ -113,7 +158,7 @@ class BackgroundWorker:
                         # 1. Fetch available margin
                         cash_balance = None
                         try:
-                            funds_url = "https://api.upstox.com/v2/user/fund-margin"
+                            funds_url = "https://api.upstox.com/v2/user/get-funds-and-margin"
                             funds_res = requests.get(funds_url, headers=headers, timeout=10)
                             if funds_res.status_code == 200:
                                 funds_data = funds_res.json().get("data") or {}
@@ -125,6 +170,46 @@ class BackgroundWorker:
                         url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
                         response = requests.get(url, headers=headers, timeout=10)
                         
+                        if response.status_code == 401 or (response.status_code == 400 and "UDAPI100050" in response.text):
+                            logger.warning(f"Upstox token expired or invalid for user {user_id}. Attempting automated token refresh...")
+                            try:
+                                try:
+                                    from scripts.auto_login_upstox import auto_login
+                                except ImportError:
+                                    try:
+                                        from backend.scripts.auto_login_upstox import auto_login
+                                    except ImportError:
+                                        import sys
+                                        import os
+                                        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                                        from scripts.auto_login_upstox import auto_login
+                                
+                                loop = asyncio.get_event_loop()
+                                success = await loop.run_in_executor(None, auto_login)
+                                if success:
+                                    profile_res = supabase.table("profiles").select("broker_oauth").eq("id", user_id).execute()
+                                    if profile_res.data:
+                                        oauth = profile_res.data[0].get("broker_oauth") or {}
+                                        access_token = oauth.get("access_token")
+                                        if access_token:
+                                            logger.info("Successfully refreshed Upstox token. Retrying sync...")
+                                            headers = {
+                                                "Authorization": f"Bearer {access_token}",
+                                                "Accept": "application/json"
+                                            }
+                                            # Retry fetching funds and holdings
+                                            try:
+                                                funds_res = requests.get(funds_url, headers=headers, timeout=10)
+                                                if funds_res.status_code == 200:
+                                                    funds_data = funds_res.json().get("data") or {}
+                                                    cash_balance = float(funds_data.get("equity", {}).get("available_margin") or 0.0)
+                                            except Exception as retry_funds_err:
+                                                logger.error(f"Failed to fetch Upstox funds on retry: {retry_funds_err}")
+                                            
+                                            response = requests.get(url, headers=headers, timeout=10)
+                            except Exception as refresh_err:
+                                logger.error(f"Failed to auto refresh token in scheduler: {refresh_err}")
+
                         if response.status_code == 200:
                             from datetime import datetime, timezone
                             data = response.json()
@@ -215,27 +300,8 @@ class BackgroundWorker:
                                     "category": "",
                                     "no_live_price": no_live_price
                                 })
-                        elif response.status_code == 401:
-                            logger.warning(f"Upstox token expired for user {user_id}. Attempting token refresh...")
-                            # Code to refresh token using client credentials
-                            refresh_token = oauth.get("refresh_token")
-                            if refresh_token:
-                                client_id = os.getenv("UPSTOX_CLIENT_ID")
-                                client_secret = os.getenv("UPSTOX_CLIENT_SECRET")
-                                refresh_url = "https://api.upstox.com/v2/login/authorization/token"
-                                refresh_res = requests.post(refresh_url, data={
-                                    "grant_type": "refresh_token",
-                                    "refresh_token": refresh_token,
-                                    "client_id": client_id,
-                                    "client_secret": client_secret
-                                }, timeout=10)
-                                
-                                if refresh_res.status_code == 200:
-                                    new_oauth = refresh_res.json()
-                                    new_oauth["broker"] = "upstox"
-                                    # Update profiles table
-                                    supabase.table("profiles").update({"broker_oauth": new_oauth}).eq("id", user_id).execute()
-                                    logger.info(f"Successfully refreshed Upstox token for user {user_id}.")
+                        else:
+                            logger.error(f"Scheduled sync: Failed to fetch Upstox holdings for user {user_id} (HTTP {response.status_code}): {response.text}")
                             continue
                     else:
                         # Fallback / Groww and Zerodha manual sync alerts remain unmodified in cron
@@ -259,10 +325,32 @@ class BackgroundWorker:
                 except Exception as user_err:
                     logger.error(f"Failed to sync broker data for user {user_id}: {user_err}")
                     
-            logger.info(f"Completed scheduled daily broker sync. Processed {active_count} profiles.")
-            
+            logger.info("Completed scheduled daily broker sync.")
         except Exception as e:
             logger.error(f"Global cron broker sync job failed: {e}")
+            
+    async def run_scheduled_analytics(self):
+        logger.info("Running scheduled portfolio metrics analysis worker...")
+        from database.connection import AsyncSessionLocal
+        from services.analytics_worker import analytics_worker_service
+        from sqlalchemy.future import select
+        from models.user_data import UserPortfolio
+        async with AsyncSessionLocal() as session:
+            try:
+                stmt = select(UserPortfolio.id)
+                res = await session.execute(stmt)
+                portfolio_ids = res.scalars().all()
+                for p_id in portfolio_ids:
+                    await analytics_worker_service.calculate_and_cache_portfolio(p_id, session)
+            except Exception as err:
+                logger.error(f"Scheduled analytics worker job failed: {err}")
+
+    async def run_scheduled_corporate_actions(self):
+        logger.info("Starting scheduled daily corporate actions scanner...")
+        from database.connection import AsyncSessionLocal
+        from services.corporate_actions import corporate_actions_service
+        async with AsyncSessionLocal() as session:
+            await corporate_actions_service.ingest_splits_and_dividends(session)
 
 worker = BackgroundWorker()
 

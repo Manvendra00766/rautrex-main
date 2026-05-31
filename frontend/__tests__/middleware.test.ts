@@ -14,6 +14,7 @@ describe('Middleware', () => {
   let mockGetSession: jest.Mock
 
   beforeEach(() => {
+    jest.clearAllMocks()
     mockGetSession = jest.fn()
     ;(createServerClient as jest.Mock).mockReturnValue({
       auth: {
@@ -22,20 +23,20 @@ describe('Middleware', () => {
     })
   })
 
-  test('test_middleware_redirects_unauthenticated: Mock getSession=null → / request → redirect to /login', async () => {
+  test('test_middleware_redirects_unauthenticated: Mock getSession=null → /dashboard request → redirect to /login', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null } })
     
     const request = {
-      nextUrl: { pathname: '/' },
-      url: 'http://localhost:3000/',
-      cookies: { get: jest.fn() },
+      nextUrl: { pathname: '/dashboard' },
+      url: 'http://localhost:3000/dashboard',
+      cookies: { getAll: jest.fn().mockReturnValue([]), set: jest.fn() },
       headers: new Headers(),
     } as any
 
     const result = await middleware(request)
     
     expect(NextResponse.redirect).toHaveBeenCalledWith(expect.objectContaining({
-      href: 'http://localhost:3000/login'
+      href: 'http://localhost:3000/login?expired=true'
     }))
   })
 
@@ -45,7 +46,7 @@ describe('Middleware', () => {
     const request = {
       nextUrl: { pathname: '/' },
       url: 'http://localhost:3000/',
-      cookies: { get: jest.fn() },
+      cookies: { getAll: jest.fn().mockReturnValue([]), set: jest.fn() },
       headers: new Headers(),
     } as any
 
@@ -60,7 +61,7 @@ describe('Middleware', () => {
     const request = {
       nextUrl: { pathname: '/login' },
       url: 'http://localhost:3000/login',
-      cookies: { get: jest.fn() },
+      cookies: { getAll: jest.fn().mockReturnValue([]), set: jest.fn() },
       headers: new Headers(),
     } as any
 

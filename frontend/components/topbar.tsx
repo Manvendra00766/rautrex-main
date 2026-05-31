@@ -135,18 +135,18 @@ export default function Topbar() {
             placeholder="Search tickers..." 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-surface/50 border border-white/5 rounded-full py-1.5 pl-9 pr-4 text-xs md:text-sm focus:outline-none focus:border-accent text-white font-mono placeholder:font-sans transition-all"
+            className="w-full bg-white border border-black/20 rounded-full py-1.5 pl-9 pr-4 text-xs md:text-sm focus:outline-none focus:border-accent text-black font-mono placeholder:font-sans transition-all"
           />
           {results.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-surface border border-white/10 rounded-xl overflow-hidden shadow-2xl z-[110]">
+            <div className="absolute top-full left-0 right-0 mt-2 bg-surface border border-[var(--border)] rounded-xl overflow-hidden shadow-2xl z-[110]">
               {results.map((r: any) => (
                 <div 
                   key={r.ticker} 
-                  className="p-3 hover:bg-white/5 cursor-pointer flex justify-between items-center"
+                  className="p-3 hover:bg-[var(--bg-secondary)] cursor-pointer flex justify-between items-center"
                   onClick={() => handleSelect(r.ticker)}
                 >
                   <span className="font-mono font-bold text-accent text-xs">{r.ticker}</span>
-                  <span className="text-[10px] text-gray-500 truncate ml-4">{r.name}</span>
+                  <span className="text-xs text-gray-500 truncate ml-4">{r.name}</span>
                 </div>
               ))}
             </div>
@@ -162,18 +162,18 @@ export default function Topbar() {
                 {hasMounted && user ? getInitials(user) : <User size={14} />}
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-56 p-2 bg-surface border-white/10 text-white shadow-2xl rounded-2xl" align="end">
-              <div className="px-2 py-2 mb-2 border-b border-white/5">
+            <PopoverContent className="w-56 p-2 bg-surface border-[var(--border)] text-[var(--text-primary)] shadow-2xl rounded-2xl" align="end">
+              <div className="px-2 py-2 mb-2 border-b border-[var(--border)]">
                 <p className="text-xs font-bold truncate uppercase tracking-widest">
                   {hasMounted ? (user?.user_metadata?.full_name || "Quant Trader") : "Loading..."}
                 </p>
-                <p className="text-[10px] text-gray-500 truncate font-mono">
+                <p className="text-xs text-gray-500 truncate font-mono">
                   {hasMounted ? user?.email : "..."}
                 </p>
               </div>
               <Button 
                 variant="ghost" 
-                className="w-full justify-start text-[10px] font-bold uppercase tracking-widest text-red-400 hover:text-red-300 hover:bg-red-500/10 h-10 rounded-xl"
+                className="w-full justify-start text-xs font-bold uppercase tracking-widest text-[var(--negative)] hover:bg-[var(--bg-secondary)] hover:text-[var(--negative)] h-10 rounded-xl"
                 onClick={handleLogout}
               >
                 <LogOut size={14} className="mr-2" />
@@ -228,7 +228,7 @@ export default function Topbar() {
                       </div>
                     )}
                     
-                    <span className="px-3 pb-2 text-[9px] font-bold uppercase tracking-widest text-[#8C8278] select-none block">
+                    <span className="px-3 pb-2 text-xs font-bold uppercase tracking-widest text-[#8C8278] select-none block">
                       {group.title}
                     </span>
 
@@ -241,7 +241,7 @@ export default function Topbar() {
                             href={item.href}
                             onClick={() => setIsDrawerOpen(false)}
                             className={cn(
-                              "flex items-center gap-3 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all relative border-l-[3px]",
+                              "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all relative border-l-[3px]",
                               isActive 
                                 ? "bg-[#EDE8DC] text-[#0A0E1A] border-[#8B6F47]" 
                                 : "text-gray-400 border-transparent hover:text-white hover:bg-white/5"

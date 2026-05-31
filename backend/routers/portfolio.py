@@ -62,6 +62,7 @@ class AuditRequest(BaseModel):
 @router.get("/overview")
 async def portfolio_overview(
     portfolio_id: Optional[str] = None,
+    exclude_history: bool = False,
     current_user=Depends(get_current_user),
 ):
     try:
@@ -72,7 +73,18 @@ async def portfolio_overview(
         except Exception as sync_err:
             print(f"Reconciliation failed silently: {sync_err}")
 
-        data = await get_portfolio_overview(current_user.id, portfolio_id)
+        data = await get_portfolio_overview(current_user.id, portfolio_id, exclude_history)
+
+        # Register all portfolio tickers with the streaming engine for live price tracking
+        try:
+            from services.streaming_engine import streaming_engine
+            positions = data.get("positions") or []
+            tickers = [p.get("ticker") or p.get("symbol") for p in positions if p.get("ticker") or p.get("symbol")]
+            if tickers:
+                streaming_engine.add_tickers(tickers)
+        except Exception as stream_err:
+            print(f"Streaming engine ticker registration failed silently: {stream_err}")
+
         return JSONResponse(content=safe_json(data))
     except Exception as e:
         import traceback
@@ -203,4 +215,24 @@ async def backtest_rebalance_route(
     except Exception as e:
         import traceback
         print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UpdateCashRequest(BaseModel):
+    portfolio_id: str
+    cash_balance: float
+
+@router.post("/update-cash")
+async def update_cash(
+    req: UpdateCashRequest,
+    current_user=Depends(get_current_user)
+):
+    try:
+        portfolio_check = current_user.db.table("portfolios").select("user_id").eq("id", req.portfolio_id).single().execute()
+        if not portfolio_check.data or portfolio_check.data.get("user_id") != current_user.id:
+            raise HTTPException(status_code=403, detail="Unauthorized")
+
+        from services.db_service import update_portfolio_cash
+        res = await update_portfolio_cash(req.portfolio_id, req.cash_balance)
+        return JSONResponse(content={"status": "success", "cash_balance": req.cash_balance})
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

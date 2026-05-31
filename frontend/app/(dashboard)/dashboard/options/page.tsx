@@ -165,7 +165,7 @@ export default function OptionsPage() {
                         <Label className="text-xs text-text-muted uppercase font-bold tracking-widest">Model</Label>
                         <div className="space-y-2">
                            {["black_scholes", "binomial", "monte_carlo", "heston"].map(m => (
-                             <div key={m} onClick={() => setModel(m)} className={cn("p-2 rounded-lg border text-[10px] font-bold uppercase cursor-pointer transition-all", model === m ? "bg-accent/20 border-accent text-accent" : "bg-card border-border text-text-muted hover:border-border-strong")}>
+                             <div key={m} onClick={() => setModel(m)} className={cn("p-2 rounded-lg border text-xs font-bold uppercase cursor-pointer transition-all", model === m ? "bg-accent/20 border-accent text-accent" : "bg-card border-border text-text-muted hover:border-border-strong")}>
                                {m.replace('_', ' ')}
                              </div>
                            ))}
@@ -174,36 +174,36 @@ export default function OptionsPage() {
 
                      <div className="space-y-4 lg:col-span-2 grid grid-cols-3 gap-6">
                         <div className="space-y-2">
-                           <Label className="text-[10px] text-text-muted uppercase font-bold">Spot (S)</Label>
+                           <Label className="text-xs text-text-muted uppercase font-bold">Spot (S)</Label>
                            <Input type="number" value={S} onChange={e => setS(Number(e.target.value))} className="bg-card font-mono" />
                         </div>
                         <div className="space-y-2">
-                           <Label className="text-[10px] text-text-muted uppercase font-bold">Strike (K)</Label>
+                           <Label className="text-xs text-text-muted uppercase font-bold">Strike (K)</Label>
                            <Input type="number" value={K} onChange={e => setK(Number(e.target.value))} className="bg-card font-mono" />
                         </div>
                         <div className="space-y-2">
-                           <Label className="text-[10px] text-text-muted uppercase font-bold">Time (T, Yrs)</Label>
+                           <Label className="text-xs text-text-muted uppercase font-bold">Time (T, Yrs)</Label>
                            <Input type="number" value={T} onChange={e => setT(Number(e.target.value))} className="bg-card font-mono" />
                         </div>
                         <div className="space-y-2">
-                           <Label className="text-[10px] text-text-muted uppercase font-bold">Risk-Free (r)</Label>
+                           <Label className="text-xs text-text-muted uppercase font-bold">Risk-Free (r)</Label>
                            <Input type="number" value={r} onChange={e => setR(Number(e.target.value))} className="bg-card font-mono" />
                         </div>
                         <div className="space-y-2">
-                           <Label className="text-[10px] text-text-muted uppercase font-bold">Volatility (σ)</Label>
+                           <Label className="text-xs text-text-muted uppercase font-bold">Volatility (σ)</Label>
                            <Input type="number" value={sigma} onChange={e => setSigma(Number(e.target.value))} className="bg-card font-mono" />
                         </div>
                         <div className="space-y-2 flex flex-col justify-end pb-1">
                            <div className="flex bg-card rounded-lg border border-border p-1 h-10">
-                              <button onClick={() => setOptType("call")} className={cn("flex-1 text-[10px] font-bold rounded-md uppercase", optType === 'call' ? "bg-accent text-text-primary" : "text-text-muted")}>Call</button>
-                              <button onClick={() => setOptType("put")} className={cn("flex-1 text-[10px] font-bold rounded-md uppercase", optType === 'put' ? "bg-accent text-text-primary" : "text-text-muted")}>Put</button>
+                              <button onClick={() => setOptType("call")} className={cn("flex-1 text-xs font-bold rounded-md uppercase", optType === 'call' ? "bg-accent text-text-primary" : "text-text-muted")}>Call</button>
+                              <button onClick={() => setOptType("put")} className={cn("flex-1 text-xs font-bold rounded-md uppercase", optType === 'put' ? "bg-accent text-text-primary" : "text-text-muted")}>Put</button>
                            </div>
                         </div>
                      </div>
 
                      <div className="space-y-4">
                         <Label className="text-xs text-text-muted uppercase font-bold tracking-widest">Model Intelligence</Label>
-                        <div className="p-3 rounded-xl bg-muted/50 border border-border text-[10px] text-text-muted italic leading-relaxed">
+                        <div className="p-3 rounded-xl bg-muted/50 border border-border text-xs text-text-muted italic leading-relaxed">
                            {model === 'black_scholes' && "Standard log-normal assumption. Best for European options."}
                            {model === 'binomial' && "50-step Cox-Ross-Rubinstein tree. Handles American exercise features."}
                            {model === 'monte_carlo' && "5,000 path simulation. Handles path-dependent dependencies."}
@@ -231,7 +231,7 @@ export default function OptionsPage() {
           <div className="flex flex-col gap-8">
              <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
                 <CardSurface className="p-6 bg-accent/10 border-accent/20 flex flex-col items-center justify-center">
-                   <p className="text-[10px] text-accent font-bold uppercase tracking-widest mb-1">Model Price</p>
+                   <p className="text-xs text-accent font-bold uppercase tracking-widest mb-1">Model Price</p>
                    <p className="text-3xl font-mono font-bold text-text-primary">${singleResult.price.toFixed(2)}</p>
                 </CardSurface>
                 {[
@@ -241,7 +241,7 @@ export default function OptionsPage() {
                   { label: "Vega", val: singleResult.greeks.vega, color: "text-green-400" },
                 ].map(g => (
                   <CardSurface key={g.label} className="p-4 flex flex-col items-center justify-center">
-                    <p className="text-[10px] text-text-muted font-bold uppercase mb-1">{g.label}</p>
+                    <p className="text-xs text-text-muted font-bold uppercase mb-1">{g.label}</p>
                     <p className={cn("text-xl font-mono font-bold", g.color)}>{g.val.toFixed(4)}</p>
                   </CardSurface>
                 ))}
@@ -259,7 +259,7 @@ export default function OptionsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis dataKey="S" stroke="var(--text-muted)" fontSize={10} />
                     <YAxis stroke="var(--text-muted)" fontSize={10} />
-                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px' }} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }} />
                     <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
                     <Line type="monotone" dataKey="delta" name="Delta" stroke="#60a5fa" dot={false} strokeWidth={2} />
                     <Line type="monotone" dataKey="gamma" name="Gamma" stroke="#c084fc" dot={false} strokeWidth={2} />

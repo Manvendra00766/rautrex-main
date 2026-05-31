@@ -1,13 +1,29 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Literal, Optional, List
-from datetime import datetime
+from typing import Literal, Optional, List, Any
+import re
 
 class PlaceOrderRequest(BaseModel):
-    ticker: str
+    ticker: str = Field(..., min_length=1, max_length=20, pattern=r"^[A-Z0-9.\=]+$")
     side: Literal["BUY", "SELL"]
-    quantity: int = Field(..., ge=1)
+    quantity: int = Field(..., gt=0)
     order_type: Literal["MARKET", "LIMIT"] = "MARKET"
-    limit_price: Optional[float] = None
+    limit_price: Optional[float] = Field(None, gt=0)
+
+    @field_validator("ticker", mode="before")
+    @classmethod
+    def sanitize_ticker(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            raise ValueError("Ticker must be a string")
+        # Trim leading and trailing spaces
+        cleaned = v.strip()
+        # Strip script blocks completely including their content (e.g. <script>alert(1)</script>)
+        cleaned = re.sub(r"<script.*?>.*?</script>", "", cleaned, flags=re.IGNORECASE)
+        # Strip all other HTML tags
+        cleaned = re.sub(r"<[^>]*>", "", cleaned)
+        # Strip any stray 'script' words to prevent bypass
+        cleaned = re.sub(r"script", "", cleaned, flags=re.IGNORECASE)
+        # Convert to uppercase
+        return cleaned.upper()
 
 class Order(BaseModel):
     id: str

@@ -90,7 +90,7 @@ export default function AddAssetModal({ isOpen, onClose, portfolioId, onSuccess 
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Ticker Symbol</Label>
+                <Label className="text-xs uppercase tracking-widest text-gray-500 font-bold">Ticker Symbol</Label>
                 <Input
                   value={ticker}
                   onChange={(e) => setTicker(e.target.value.toUpperCase())}
@@ -101,7 +101,7 @@ export default function AddAssetModal({ isOpen, onClose, portfolioId, onSuccess 
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Quantity</Label>
+                  <Label className="text-xs uppercase tracking-widest text-gray-500 font-bold">Quantity</Label>
                   <Input
                     type="number"
                     value={quantity}
@@ -111,7 +111,7 @@ export default function AddAssetModal({ isOpen, onClose, portfolioId, onSuccess 
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Buy Price</Label>
+                  <Label className="text-xs uppercase tracking-widest text-gray-500 font-bold">Buy Price</Label>
                   <Input
                     type="number"
                     value={price}
@@ -123,7 +123,7 @@ export default function AddAssetModal({ isOpen, onClose, portfolioId, onSuccess 
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Asset Type</Label>
+                <Label className="text-xs uppercase tracking-widest text-gray-500 font-bold">Asset Type</Label>
                 <div className="grid grid-cols-2 gap-2">
                   {ASSET_TYPES.map((type) => (
                     <button

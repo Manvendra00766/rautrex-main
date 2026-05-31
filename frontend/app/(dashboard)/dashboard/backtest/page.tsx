@@ -104,7 +104,7 @@ export default function BacktestPage() {
         </div>
         <div className="flex items-center gap-2">
           {results && (
-            <Button onClick={handleExportPDF} variant="outline" className="bg-surface border-border gap-2 text-text-primary">
+            <Button onClick={handleExportPDF} variant="outline" className="bg-card border-border gap-2 text-text-primary">
               <Download size={16} /> Export PDF
             </Button>
           )}
@@ -146,7 +146,7 @@ export default function BacktestPage() {
                       <div 
                         key={s.id}
                         onClick={() => setStrategy(s.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${strategy === s.id ? "bg-accent/10 border-accent" : "bg-surface border-border hover:border-border-strong"}`}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-3 ${strategy === s.id ? "bg-accent/10 border-accent" : "bg-card border-border hover:border-border-strong"}`}
                       >
                         <div className={`p-2 rounded-lg ${strategy === s.id ? "bg-accent/20 text-accent" : "bg-card text-text-muted"}`}>
                           {React.cloneElement(s.icon as React.ReactElement, { size: 18 })}
@@ -162,19 +162,19 @@ export default function BacktestPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-text-muted text-xs">Start Date</Label>
-                      <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-surface border-border" />
+                      <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-card border-border" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-text-muted text-xs">End Date</Label>
-                      <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-surface border-border" />
+                      <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-card border-border" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-text-muted text-xs">Capital ($)</Label>
-                      <Input type="number" value={capital} onChange={e => setCapital(Number(e.target.value))} className="bg-surface border-border" />
+                      <Input type="number" value={capital} onChange={e => setCapital(Number(e.target.value))} className="bg-card border-border" />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-text-muted text-xs">Fee (%)</Label>
-                      <Input type="number" step="0.01" value={commission} onChange={e => setCommission(Number(e.target.value))} className="bg-surface border-border" />
+                      <Input type="number" step="0.01" value={commission} onChange={e => setCommission(Number(e.target.value))} className="bg-card border-border" />
                     </div>
                   </div>
                 </div>
@@ -186,11 +186,11 @@ export default function BacktestPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label className="text-text-muted text-xs">Fast</Label>
-                          <Input type="number" value={smaFast} onChange={e => setSmaFast(Number(e.target.value))} className="bg-surface border-border" />
+                          <Input type="number" value={smaFast} onChange={e => setSmaFast(Number(e.target.value))} className="bg-card border-border" />
                         </div>
                         <div className="space-y-2">
                           <Label className="text-text-muted text-xs">Slow</Label>
-                          <Input type="number" value={smaSlow} onChange={e => setSmaSlow(Number(e.target.value))} className="bg-surface border-border" />
+                          <Input type="number" value={smaSlow} onChange={e => setSmaSlow(Number(e.target.value))} className="bg-card border-border" />
                         </div>
                       </div>
                     )}
@@ -198,15 +198,15 @@ export default function BacktestPage() {
                       <div className="grid grid-cols-3 gap-2">
                         <div className="space-y-2">
                           <Label className="text-text-muted text-xs">Period</Label>
-                          <Input type="number" value={rsiPeriod} onChange={e => setRsiPeriod(Number(e.target.value))} className="bg-surface border-border px-2" />
+                          <Input type="number" value={rsiPeriod} onChange={e => setRsiPeriod(Number(e.target.value))} className="bg-card border-border px-2" />
                         </div>
                         <div className="space-y-2">
                           <Label className="text-text-muted text-xs">OS</Label>
-                          <Input type="number" value={rsiOversold} onChange={e => setRsiOversold(Number(e.target.value))} className="bg-surface border-border px-2" />
+                          <Input type="number" value={rsiOversold} onChange={e => setRsiOversold(Number(e.target.value))} className="bg-card border-border px-2" />
                         </div>
                         <div className="space-y-2">
                           <Label className="text-text-muted text-xs">OB</Label>
-                          <Input type="number" value={rsiOverbought} onChange={e => setRsiOverbought(Number(e.target.value))} className="bg-surface border-border px-2" />
+                          <Input type="number" value={rsiOverbought} onChange={e => setRsiOverbought(Number(e.target.value))} className="bg-card border-border px-2" />
                         </div>
                       </div>
                     )}
@@ -283,12 +283,12 @@ export default function BacktestPage() {
                     <YAxis yAxisId="left" stroke="var(--text-muted)" fontSize={10} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                     <YAxis yAxisId="right" orientation="right" stroke="var(--negative)" fontSize={10} tickFormatter={(v) => `${(v*100).toFixed(0)}%`} />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px' }}
+                      contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }}
                       itemStyle={{ fontSize: '12px' }}
                       labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
                     />
                     <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                    <Line yAxisId="left" type="monotone" dataKey="equity" name="Strategy Equity" stroke="var(--accent-teal)" strokeWidth={2} dot={false} activeDot={{ r: 6, fill: 'var(--bg-surface)', stroke: 'var(--accent-teal)', strokeWidth: 2 }} />
+                    <Line yAxisId="left" type="monotone" dataKey="equity" name="Strategy Equity" stroke="var(--accent-teal)" strokeWidth={2} dot={false} activeDot={{ r: 6, fill: 'var(--bg-card)', stroke: 'var(--accent-teal)', strokeWidth: 2 }} />
                     <Line yAxisId="left" type="monotone" dataKey="bnh_equity" name="Buy & Hold" stroke="var(--accent-purple)" strokeWidth={2} strokeDasharray="5 5" dot={false} />
                     <Area yAxisId="right" type="monotone" dataKey="drawdown" name="Drawdown" fill="url(#drawdownGradient)" stroke="var(--negative)" strokeWidth={1} fillOpacity={1} />
                   </ComposedChart>
@@ -305,7 +305,7 @@ export default function BacktestPage() {
                 </div>
                 <div className="flex-1 overflow-auto">
                   <table className="w-full text-sm text-left">
-                    <thead className="text-[10px] text-text-muted uppercase bg-card sticky top-0 backdrop-blur-md">
+                    <thead className="text-xs text-text-muted uppercase bg-card sticky top-0 backdrop-blur-md">
                       <tr>
                         <th className="px-6 py-3">Entry</th>
                         <th className="px-6 py-3">Exit</th>

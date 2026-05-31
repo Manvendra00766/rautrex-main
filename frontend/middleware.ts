@@ -13,42 +13,21 @@ export async function middleware(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return req.cookies.get(name)?.value
+        getAll() {
+          return req.cookies.getAll()
         },
-        set(name: string, value: string, options: CookieOptions) {
-          req.cookies.set({
-            name,
-            value,
-            ...options,
-          })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            req.cookies.set(name, value)
+          )
           res = NextResponse.next({
             request: {
               headers: req.headers,
             },
           })
-          res.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: CookieOptions) {
-          req.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          res = NextResponse.next({
-            request: {
-              headers: req.headers,
-            },
-          })
-          res.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            res.cookies.set(name, value, options)
+          )
         },
       },
     }
@@ -58,12 +37,7 @@ export async function middleware(req: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
 
   const isAuthPage = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/signup')
-  const isProtectedPage = req.nextUrl.pathname.startsWith('/dashboard') || 
-                          req.nextUrl.pathname.startsWith('/portfolio') ||
-                          req.nextUrl.pathname.startsWith('/market') ||
-                          req.nextUrl.pathname.startsWith('/backtest') ||
-                          req.nextUrl.pathname.startsWith('/signals') ||
-                          req.nextUrl.pathname.startsWith('/onboarding')
+  const isProtectedPage = req.nextUrl.pathname.startsWith('/dashboard') || req.nextUrl.pathname.startsWith('/onboarding')
 
   // If no session and on protected page → go to login
   if (!session && isProtectedPage) {
@@ -84,10 +58,6 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     '/dashboard/:path*',
-    '/portfolio/:path*',
-    '/market/:path*',
-    '/backtest/:path*',
-    '/signals/:path*',
     '/onboarding',
     '/onboarding/:path*',
     '/login',

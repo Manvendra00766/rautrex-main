@@ -15,6 +15,11 @@ export const metadata: Metadata = {
   }
 };
 
+import { Inter, Lora } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const lora = Lora({ subsets: ['latin'], variable: '--font-serif' });
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -22,9 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="font-sans bg-background text-text-primary antialiased min-h-screen flex flex-col">
-
-        <ThemeProvider 
+      <body className={`${inter.variable} ${lora.variable} font-sans bg-background text-text-primary antialiased min-h-screen flex flex-col`}>        <ThemeProvider 
           attribute="class" 
           defaultTheme="light" 
           enableSystem={false}

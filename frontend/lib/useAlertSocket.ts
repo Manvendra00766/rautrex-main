@@ -14,19 +14,32 @@ export function useAlertSocket() {
   useEffect(() => {
     if (!user) return;
 
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
-    const socket = new WebSocket(`${wsUrl}/${user.id}`);
+    // Use the correct WebSocket endpoint: /ws/stream with client_id query param
+    const baseApi = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+    // Derive WebSocket base from API URL (strip /api/v1 and swap http→ws)
+    const httpBase = baseApi.replace(/\/api\/v1\/?$/, '');
+    const wsBase = httpBase.replace(/^http/, 'ws');
+    const wsUrl = `${wsBase}/ws/stream?client_id=${user.id}`;
+
+    const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
     socket.onopen = () => {
-      console.log('Alert WebSocket Connected');
-      // Subscribe to user specific channel if needed, 
-      // but backend manager handles direct user broadcasting in this case
+      console.log('Alert WebSocket Connected to', wsUrl);
+      // Subscribe to market channel to receive live price updates
+      socket.send(JSON.stringify({ type: 'subscribe', channel: 'market' }));
     };
 
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+
+        if (data.type === 'ping') {
+          // Respond to heartbeat pings to keep connection alive
+          socket.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+
         if (data.type === 'ALERT_TRIGGERED') {
           // Play sound
           const audio = new Audio('/sounds/alert.mp3');
@@ -49,6 +62,10 @@ export function useAlertSocket() {
 
     socket.onclose = () => {
       console.log('Alert WebSocket Disconnected');
+    };
+
+    socket.onerror = (err) => {
+      console.error('Alert WebSocket Error:', err);
     };
 
     return () => {

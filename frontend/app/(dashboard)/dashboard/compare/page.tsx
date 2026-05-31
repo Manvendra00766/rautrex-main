@@ -20,7 +20,7 @@ import { useMarketStore } from "@/lib/market-store";
 import ChartWrapper from '@/components/ChartWrapper';
 
 const STRATEGIES = [
-  { id: "sma_crossover", name: "SMA Crossover", color: "#00d4ff" },
+  { id: "sma_crossover", name: "SMA Crossover", color: "#8B6F47" },
   { id: "rsi_reversion", name: "RSI Reversion", color: "#ff4d4d" },
   { id: "macd", name: "MACD Strategy", color: "#00ff88" },
   { id: "bollinger", name: "Bollinger Breakout", color: "#ffea00" },
@@ -103,7 +103,7 @@ export default function ComparePage() {
 
   const stratColors: Record<string, string> = {
     "Buy & Hold": "#7c3aed",
-    "SMA Crossover": "#00d4ff",
+    "SMA Crossover": "#8B6F47",
     "RSI Reversion": "#ff4d4d",
     "MACD Strategy": "#00ff88",
     "Bollinger Breakout": "#ffea00",
@@ -152,7 +152,7 @@ export default function ComparePage() {
               <CardSurface key={metric} className="p-3 flex flex-col items-center justify-center text-center gap-1 relative overflow-hidden group">
                 <div className="absolute inset-0 bg-accent/5 translate-y-full group-hover:translate-y-0 transition-transform" />
                 <Award size={16} className="text-accent mb-1" />
-                <span className="text-[10px] text-text-muted uppercase tracking-wider">{metric.replace('_', ' ')}</span>
+                <span className="text-xs text-text-muted uppercase tracking-wider">{metric.replace('_', ' ')}</span>
                 <span className="text-xs font-bold text-text-primary max-w-full truncate">{strat}</span>
               </CardSurface>
             ))}
@@ -172,7 +172,7 @@ export default function ComparePage() {
                 <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={10} minTickGap={50} />
                 <YAxis stroke="var(--text-muted)" fontSize={10} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px' }}
+                  contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }}
                   itemStyle={{ fontSize: '12px' }}
                   labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
                 />
@@ -207,7 +207,7 @@ export default function ComparePage() {
               </div>
               <div className="flex-1 overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                  <thead className="text-[10px] text-text-muted uppercase bg-card/50">
+                  <thead className="text-xs text-text-muted uppercase bg-card/50">
                     <tr>
                       <th className="px-4 py-3">Strategy</th>
                       <th className="px-4 py-3 text-right">Total Ret</th>
@@ -261,7 +261,7 @@ export default function ComparePage() {
                   <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
                   <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                   <Tooltip 
-                    contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px' }}
+                    contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }}
                     itemStyle={{ fontSize: '10px' }}
                   />
                   {Object.keys(stratColors).map(strat => (

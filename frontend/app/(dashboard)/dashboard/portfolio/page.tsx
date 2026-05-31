@@ -349,7 +349,7 @@ export default function PortfolioLab() {
                 "relative cursor-pointer p-5 rounded-2xl border transition-all overflow-hidden group",
                 selectedPortfolioId === portfolio.id 
                   ? "bg-accent/10 border-accent shadow-lg shadow-accent/10" 
-                  : "bg-surface border-border hover:border-border-strong"
+                  : "bg-card border-border hover:border-border-strong"
               )}
             >
               {selectedPortfolioId === portfolio.id && (
@@ -364,7 +364,7 @@ export default function PortfolioLab() {
                   )}>
                     {portfolio.name}
                   </h3>
-                  <span className="text-[10px] text-text-muted font-mono uppercase">
+                  <span className="text-xs text-text-muted font-mono uppercase">
                     {(portfolio as any).strategy || "Equity"}
                   </span>
                 </div>
@@ -378,7 +378,7 @@ export default function PortfolioLab() {
                       <MoreVertical size={16} />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-48 bg-surface border-border p-1" align="end" side="bottom">
+                  <PopoverContent className="w-48 bg-card border-border p-1" align="end" side="bottom">
                     <button 
                       className="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-card rounded-lg flex items-center gap-2"
                       onClick={(e) => {
@@ -405,7 +405,7 @@ export default function PortfolioLab() {
 
               <div className="flex items-end justify-between mt-4">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-text-muted uppercase font-bold">Initial Cash</span>
+                  <span className="text-xs text-text-muted uppercase font-bold">Initial Cash</span>
                   <span className="text-sm font-mono text-text-primary">{formatCurrency((portfolio as any).cash_balance || 0)}</span>
                 </div>
                 <ChevronRight size={16} className={cn(
@@ -445,7 +445,7 @@ export default function PortfolioLab() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
                <h2 className="text-xl font-bold text-text-primary">{overview.portfolio.name} Dashboard</h2>
-               <div className="px-3 py-1 bg-accent/10 border border-accent/20 rounded-full text-[10px] font-bold text-accent uppercase">
+               <div className="px-3 py-1 bg-accent/10 border border-accent/20 rounded-full text-xs font-bold text-accent uppercase">
                  {(overview.portfolio as any).strategy || "Equity"}
                </div>
             </div>
@@ -460,7 +460,7 @@ export default function PortfolioLab() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="bg-surface border border-border h-12 mb-4">
+            <TabsList className="bg-card border border-border h-12 mb-4">
               <TabsTrigger value="manager" className="px-8 font-bold uppercase tracking-widest text-xs">Portfolio Manager</TabsTrigger>
               <TabsTrigger value="optimize" className="px-8 font-bold uppercase tracking-widest text-xs">Optimization Lab</TabsTrigger>
               <TabsTrigger value="rebalance" className="px-8 font-bold uppercase tracking-widest text-xs">Rebalancer</TabsTrigger>
@@ -513,7 +513,7 @@ export default function PortfolioLab() {
                       className="mb-0"
                     />
                     <div className="text-right">
-                      <p className="text-[10px] text-text-muted uppercase font-bold">YTD Performance</p>
+                      <p className="text-xs text-text-muted uppercase font-bold">YTD Performance</p>
                       <p className={cn("text-lg font-mono font-bold", summary.ytd_return_pct >= 0 ? "text-positive" : "text-negative")}>
                         {formatPct(summary.ytd_return_pct)}
                       </p>
@@ -533,7 +533,7 @@ export default function PortfolioLab() {
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                             <XAxis dataKey="snapshot_date" stroke="var(--text-muted)" fontSize={10} minTickGap={40} />
                             <YAxis stroke="var(--text-muted)" fontSize={10} domain={yDomain} tickFormatter={(value) => `${activeCurrency === "INR" ? "₹" : "$"}${value.toLocaleString()}`} />
-                            <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 16 }} />
+                            <Tooltip formatter={(value: number) => formatCurrency(value)} contentStyle={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 16 }} />
                             <Area type="monotone" dataKey="nav" stroke="var(--accent-teal)" strokeWidth={2} fill="url(#portfolioEquity)" />
                           </AreaChart>
                         </ResponsiveContainer>
@@ -571,7 +571,7 @@ export default function PortfolioLab() {
                     {(allocation?.by_sector || []).slice(0, 4).map((item, index) => (
                       <div key={item.label} className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                        <span className="text-[10px] text-text-muted truncate">{item.label}</span>
+                        <span className="text-xs text-text-muted truncate">{item.label}</span>
                       </div>
                     ))}
                   </div>
@@ -586,13 +586,13 @@ export default function PortfolioLab() {
                     className="mb-0"
                   />
                   <div className="text-right">
-                    <p className="text-[10px] text-text-muted uppercase font-bold">Gross Exposure</p>
+                    <p className="text-xs text-text-muted uppercase font-bold">Gross Exposure</p>
                     <p className="text-lg font-mono font-bold text-accent">{formatCurrency(summary.gross_exposure)}</p>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse font-mono text-sm">
-                    <thead className="text-[10px] text-text-muted uppercase tracking-widest border-b border-border">
+                    <thead className="text-xs text-text-muted uppercase tracking-widest border-b border-border">
                       <tr>
                         <th className="px-3 py-3">Ticker</th>
                         <th className="px-3 py-3 text-right">Shares</th>
@@ -612,7 +612,7 @@ export default function PortfolioLab() {
                             <td className="px-3 py-4">
                               <div className="flex flex-col">
                                 <span className="font-bold text-text-primary">{position.ticker}</span>
-                                <span className="text-[10px] text-text-muted uppercase">{position.sector || position.asset_type}</span>
+                                <span className="text-xs text-text-muted uppercase">{position.sector || position.asset_type}</span>
                               </div>
                             </td>
                             <td className="px-3 py-4 text-right text-text-secondary">{position.shares.toFixed(4).replace(/\.?0+$/, "")}</td>
@@ -621,7 +621,7 @@ export default function PortfolioLab() {
                               <div className="flex flex-col items-end">
                                 <span>{formatCurrency(position.live_price)}</span>
                                 {position.no_live_price && (
-                                  <span className="text-[8px] text-text-muted font-normal lowercase bg-surface border border-border px-1 rounded select-none">no live price</span>
+                                  <span className="text-[8px] text-text-muted font-normal lowercase bg-card border border-border px-1 rounded select-none">no live price</span>
                                 )}
                               </div>
                             </td>
@@ -649,7 +649,7 @@ export default function PortfolioLab() {
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                 <CardSurface className="xl:col-span-4 space-y-6">
                   <div className="space-y-3">
-                    <Label className="text-[10px] uppercase tracking-widest text-text-muted font-bold">Universe</Label>
+                    <Label className="text-xs uppercase tracking-widest text-text-muted font-bold">Universe</Label>
                     <div className="flex flex-wrap gap-2">
                       {tickers.map((ticker) => (
                         <button key={ticker} onClick={() => setTickers((current) => current.filter((item) => item !== ticker))} className="px-3 py-1 rounded-full bg-card border border-border text-xs font-mono text-text-primary flex items-center gap-2">
@@ -658,7 +658,7 @@ export default function PortfolioLab() {
                       ))}
                     </div>
                     <div className="flex gap-2">
-                      <Input value={newTicker} onChange={(event) => setNewTicker(event.target.value.toUpperCase())} placeholder="AAPL" className="bg-surface h-10 border-border" />
+                      <Input value={newTicker} onChange={(event) => setNewTicker(event.target.value.toUpperCase())} placeholder="AAPL" className="bg-card h-10 border-border" />
                       <Button onClick={() => {
                         if (!newTicker || tickers.includes(newTicker)) return
                         setTickers((current) => [...current, newTicker])
@@ -668,14 +668,14 @@ export default function PortfolioLab() {
                   </div>
 
                   <div className="space-y-3">
-                    <Label className="text-[10px] uppercase tracking-widest text-text-muted font-bold">Method</Label>
+                    <Label className="text-xs uppercase tracking-widest text-text-muted font-bold">Method</Label>
                     <div className="grid grid-cols-1 gap-2">
                       {[
                         { id: "markowitz", label: "Mean-Variance" },
                         { id: "risk_parity", label: "Risk Parity" },
                         { id: "max_diversification", label: "Max Diversification" },
                       ].map((option) => (
-                        <button key={option.id} onClick={() => setMethod(option.id)} className={cn("p-3 rounded-xl border text-left transition-all", method === option.id ? "border-accent bg-accent/10 text-text-primary" : "border-border bg-surface text-text-muted")}>
+                        <button key={option.id} onClick={() => setMethod(option.id)} className={cn("p-3 rounded-xl border text-left transition-all", method === option.id ? "border-accent bg-accent/10 text-text-primary" : "border-border bg-card text-text-muted")}>
                           <p className="text-xs font-bold uppercase">{option.label}</p>
                         </button>
                       ))}
@@ -683,8 +683,8 @@ export default function PortfolioLab() {
                   </div>
 
                   <div className="space-y-3">
-                    <Label className="text-[10px] uppercase tracking-widest text-text-muted font-bold">Objective</Label>
-                    <select value={objective} onChange={(event) => setObjective(event.target.value)} className="w-full bg-surface border border-border rounded-xl h-11 px-4 text-sm text-text-primary">
+                    <Label className="text-xs uppercase tracking-widest text-text-muted font-bold">Objective</Label>
+                    <select value={objective} onChange={(event) => setObjective(event.target.value)} className="w-full bg-card border border-border rounded-xl h-11 px-4 text-sm text-text-primary">
                       <option value="max_sharpe">Max Sharpe</option>
                       <option value="min_vol">Min Volatility</option>
                       <option value="max_return">Max Return</option>
@@ -707,7 +707,7 @@ export default function PortfolioLab() {
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                                 <XAxis type="number" dataKey="volatility" stroke="var(--text-muted)" tickFormatter={(value) => `${(value * 100).toFixed(1)}%`} />
                                 <YAxis type="number" dataKey="return" stroke="var(--text-muted)" tickFormatter={(value) => `${(value * 100).toFixed(1)}%`} />
-                                <Tooltip formatter={(value: number) => `${(value * 100).toFixed(2)}%`} contentStyle={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 16 }} />
+                                <Tooltip formatter={(value: number) => `${(value * 100).toFixed(2)}%`} contentStyle={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 16 }} />
                                 <Scatter data={optimizationResult.random_portfolios || []} fill="var(--border-strong)" />
                                 <Scatter data={optimizationResult.frontier || []} fill="var(--accent-teal)" />
                               </ScatterChart>
@@ -747,7 +747,7 @@ export default function PortfolioLab() {
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                 <CardSurface className="xl:col-span-4 space-y-5">
                   <div className="space-y-3">
-                    <Label className="text-[10px] uppercase tracking-widest text-text-muted font-bold">Target Weights</Label>
+                    <Label className="text-xs uppercase tracking-widest text-text-muted font-bold">Target Weights</Label>
                     {positions.map((position) => (
                       <div key={position.ticker} className="flex items-center justify-between gap-3">
                         <span className="text-sm font-mono text-text-primary">{position.ticker}</span>
@@ -760,13 +760,13 @@ export default function PortfolioLab() {
                               [position.ticker]: Number(event.target.value) / 100,
                             }))
                           }
-                          className="w-24 bg-surface border-border h-9 text-right"
+                          className="w-24 bg-card border-border h-9 text-right"
                         />
                       </div>
                     ))}
                   </div>
                   <div className="space-y-3">
-                    <Label className="text-[10px] uppercase tracking-widest text-text-muted font-bold">Drift Threshold: {(rebalanceThreshold * 100).toFixed(0)}%</Label>
+                    <Label className="text-xs uppercase tracking-widest text-text-muted font-bold">Drift Threshold: {(rebalanceThreshold * 100).toFixed(0)}%</Label>
                     <input type="range" min="0" max="0.2" step="0.01" value={rebalanceThreshold} onChange={(event) => setRebalanceThreshold(Number(event.target.value))} className="w-full accent-accent" />
                   </div>
                   <Button onClick={runRebalance} loading={rebalanceLoading} className="w-full bg-accent hover:bg-accent/90 text-text-primary font-bold h-11">
@@ -784,7 +784,7 @@ export default function PortfolioLab() {
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse font-mono text-sm">
-                          <thead className="text-[10px] text-text-muted uppercase tracking-widest border-b border-border">
+                          <thead className="text-xs text-text-muted uppercase tracking-widest border-b border-border">
                             <tr>
                               <th className="px-3 py-3">Ticker</th>
                               <th className="px-3 py-3 text-right">Action</th>
@@ -830,7 +830,7 @@ export default function PortfolioLab() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs uppercase font-bold text-text-muted">Portfolio Name</Label>
-                    <Input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} placeholder="Main Equity / Growth" className="bg-surface border-border h-12 text-text-primary" />
+                    <Input value={portfolioName} onChange={(event) => setPortfolioName(event.target.value)} placeholder="Main Equity / Growth" className="bg-card border-border h-12 text-text-primary" />
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -839,7 +839,7 @@ export default function PortfolioLab() {
                       <select 
                         value={portfolioStrategy} 
                         onChange={(event) => setPortfolioStrategy(event.target.value)} 
-                        className="w-full bg-surface border border-border rounded-xl h-12 px-4 text-sm text-text-primary"
+                        className="w-full bg-card border border-border rounded-xl h-12 px-4 text-sm text-text-primary"
                       >
                         {STRATEGIES.map((s) => (
                           <option key={s} value={s}>{s}</option>
@@ -852,14 +852,14 @@ export default function PortfolioLab() {
                         type="number" 
                         value={initialCash} 
                         onChange={(event) => setInitialCash(event.target.value)} 
-                        className="bg-surface border-border h-12 text-text-primary" 
+                        className="bg-card border-border h-12 text-text-primary" 
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-xs uppercase font-bold text-text-muted">Description</Label>
-                    <Input value={portfolioDescription} onChange={(event) => setPortfolioDescription(event.target.value)} placeholder="Institutional long-only mandate" className="bg-surface border-border h-12 text-text-primary" />
+                    <Input value={portfolioDescription} onChange={(event) => setPortfolioDescription(event.target.value)} placeholder="Institutional long-only mandate" className="bg-card border-border h-12 text-text-primary" />
                   </div>
                   
                   <div className="flex gap-3 pt-4">
@@ -881,7 +881,7 @@ export default function PortfolioLab() {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-xs uppercase font-bold text-text-muted">Transaction Type</Label>
-                    <select value={transactionType} onChange={(event) => setTransactionType(event.target.value as TransactionType)} className="w-full bg-surface border border-border rounded-xl h-12 px-4 text-sm text-text-primary">
+                    <select value={transactionType} onChange={(event) => setTransactionType(event.target.value as TransactionType)} className="w-full bg-card border border-border rounded-xl h-12 px-4 text-sm text-text-primary">
                       {["BUY", "SELL", "DEPOSIT", "WITHDRAWAL", "DIVIDEND", "FEE"].map((type) => (
                         <option key={type} value={type}>{type}</option>
                       ))}
@@ -892,15 +892,15 @@ export default function PortfolioLab() {
                       <div className="grid grid-cols-3 gap-3">
                         <div className="col-span-1 space-y-2">
                           <Label className="text-xs uppercase font-bold text-text-muted">Ticker</Label>
-                          <Input value={symbol} onChange={(event) => setSymbol(event.target.value.toUpperCase())} placeholder="NVDA" className="bg-surface border-border h-12 text-text-primary" />
+                          <Input value={symbol} onChange={(event) => setSymbol(event.target.value.toUpperCase())} placeholder="NVDA" className="bg-card border-border h-12 text-text-primary" />
                         </div>
                         <div className="space-y-2">
                           <Label className="text-xs uppercase font-bold text-text-muted">Shares</Label>
-                          <Input type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="bg-surface border-border h-12 text-text-primary" />
+                          <Input type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="bg-card border-border h-12 text-text-primary" />
                         </div>
                         <div className="space-y-2">
                           <Label className="text-xs uppercase font-bold text-text-muted">Price</Label>
-                          <Input type="number" value={price} onChange={(event) => setPrice(event.target.value)} className="bg-surface border-border h-12 text-text-primary" />
+                          <Input type="number" value={price} onChange={(event) => setPrice(event.target.value)} className="bg-card border-border h-12 text-text-primary" />
                         </div>
                       </div>
                     </>
@@ -908,7 +908,7 @@ export default function PortfolioLab() {
                   {["DEPOSIT", "WITHDRAWAL", "DIVIDEND", "FEE"].includes(transactionType) && (
                     <div className="space-y-2">
                       <Label className="text-xs uppercase font-bold text-text-muted">Cash Amount</Label>
-                      <Input type="number" value={grossAmount} onChange={(event) => setGrossAmount(event.target.value)} className="bg-surface border-border h-12 text-text-primary" />
+                      <Input type="number" value={grossAmount} onChange={(event) => setGrossAmount(event.target.value)} className="bg-card border-border h-12 text-text-primary" />
                     </div>
                   )}
                   <div className="flex gap-3 pt-4">

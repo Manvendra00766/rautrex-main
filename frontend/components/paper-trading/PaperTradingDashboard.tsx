@@ -241,7 +241,7 @@ export default function PaperTradingDashboard() {
                         <TableCell className="text-right font-mono">{pos.current_price.toFixed(2)}</TableCell>
                         <TableCell className={cn("text-right font-mono font-medium", getPnLClass(pos.pnl))}>
                           <div>{pos.pnl >= 0 ? '+' : ''}{pos.pnl.toLocaleString('en-IN')}</div>
-                          <div className="text-[10px] opacity-80">({pos.pnl_pct.toFixed(2)}%)</div>
+                          <div className="text-xs opacity-80">({pos.pnl_pct.toFixed(2)}%)</div>
                         </TableCell>
                         <TableCell className="text-right font-mono text-slate-300">
                           {formatINR(pos.total_value)}
@@ -348,7 +348,7 @@ export default function PaperTradingDashboard() {
                           <TableCell className="font-bold text-slate-300">{order.ticker}</TableCell>
                           <TableCell>
                             <Badge className={cn(
-                              "text-[10px] font-bold px-1.5 py-0 h-5 border-0",
+                              "text-xs font-bold px-1.5 py-0 h-5 border-0",
                               order.side === "BUY" ? "bg-blue-500/20 text-blue-400" : "bg-orange-500/20 text-orange-400"
                             )}>
                               {order.side}
@@ -360,7 +360,7 @@ export default function PaperTradingDashboard() {
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge className={cn(
-                              "text-[10px] font-bold px-1.5 py-0 h-5 border-0",
+                              "text-xs font-bold px-1.5 py-0 h-5 border-0",
                               order.status === "EXECUTED" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
                             )}>
                               {order.status}
@@ -455,7 +455,7 @@ export default function PaperTradingDashboard() {
                           type="button"
                           onClick={() => setOrderType("MARKET")}
                           className={cn(
-                            "flex-1 text-[10px] font-bold rounded-sm uppercase transition-colors",
+                            "flex-1 text-xs font-bold rounded-sm uppercase transition-colors",
                             orderType === "MARKET" ? "bg-slate-800 text-white" : "text-slate-500"
                           )}
                         >
@@ -465,7 +465,7 @@ export default function PaperTradingDashboard() {
                           type="button"
                           onClick={() => setOrderType("LIMIT")}
                           className={cn(
-                            "flex-1 text-[10px] font-bold rounded-sm uppercase transition-colors",
+                            "flex-1 text-xs font-bold rounded-sm uppercase transition-colors",
                             orderType === "LIMIT" ? "bg-slate-800 text-white" : "text-slate-500"
                           )}
                         >
@@ -503,7 +503,7 @@ export default function PaperTradingDashboard() {
                     </span>
                   </div>
                   {side === "BUY" && portfolio && estimatedCost > portfolio.cash_balance && (
-                    <div className="flex items-center gap-2 text-[10px] text-red-400 bg-red-400/10 p-2 rounded-lg mt-2">
+                    <div className="flex items-center gap-2 text-xs text-red-400 bg-red-400/10 p-2 rounded-lg mt-2">
                       <AlertCircle className="w-3 h-3" />
                       Warning: Insufficient cash balance
                     </div>

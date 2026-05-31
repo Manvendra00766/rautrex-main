@@ -1,10 +1,35 @@
 import requests
 import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 from core.logger import logger
 from supabase_client import supabase
 from services.pricing_engine import upsert_cached_price, PriceSnapshot
+
+async def _trigger_upstox_auto_login() -> bool:
+    """
+    Attempts to programmatically log in to Upstox using Playwright
+    and updates the broker_oauth token in Supabase.
+    """
+    logger.info("Reconciliation: Triggering programmatically automated Upstox login refresh...")
+    try:
+        try:
+            from scripts.auto_login_upstox import auto_login
+        except ImportError:
+            try:
+                from backend.scripts.auto_login_upstox import auto_login
+            except ImportError:
+                import sys
+                sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                from scripts.auto_login_upstox import auto_login
+
+        loop = asyncio.get_event_loop()
+        success = await loop.run_in_executor(None, auto_login)
+        return bool(success)
+    except Exception as e:
+        logger.error(f"Reconciliation: Automated login exception: {e}")
+        return False
 
 async def reconcile_portfolio_with_upstox(user_id: str, portfolio_id: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -38,6 +63,23 @@ async def reconcile_portfolio_with_upstox(user_id: str, portfolio_id: Optional[s
         token = oauth.get("access_token")
         broker = str(oauth.get("broker") or "").lower()
         
+        # If no active connection is set in profile, but we have credentials in .env,
+        # we can attempt to establish it automatically on the fly.
+        if broker != "upstox":
+            env_user_email = os.getenv("USER_EMAIL")
+            user_email_res = supabase.table("profiles").select("email").eq("id", user_id).execute()
+            user_email = user_email_res.data[0].get("email") if user_email_res.data else None
+            
+            if user_email and env_user_email and user_email.lower() == env_user_email.lower():
+                logger.info(f"Reconciliation: No active Upstox connection for {user_email}, but env configured. Triggering auto-login...")
+                success = await _trigger_upstox_auto_login()
+                if success:
+                    profile_res = supabase.table("profiles").select("broker_oauth").eq("id", user_id).execute()
+                    if profile_res.data:
+                        oauth = profile_res.data[0].get("broker_oauth") or {}
+                        token = oauth.get("access_token")
+                        broker = str(oauth.get("broker") or "").lower()
+            
         if not token or broker != "upstox":
             report["reason"] = "No active Upstox connection found"
             return report
@@ -55,30 +97,63 @@ async def reconcile_portfolio_with_upstox(user_id: str, portfolio_id: Optional[s
     upstox_cash = None
     upstox_holdings_raw = []
     
-    try:
-        # A. Fetch Cash Margin
-        funds_url = "https://api.upstox.com/v2/user/fund-margin"
-        loop = asyncio.get_event_loop()
-        funds_res = await loop.run_in_executor(None, lambda: requests.get(funds_url, headers=headers, timeout=10))
-        if funds_res.status_code == 200:
-            funds_data = funds_res.json().get("data") or {}
-            upstox_cash = float(funds_data.get("equity", {}).get("available_margin") or 0.0)
-        else:
-            report["log_messages"].append(f"Failed to fetch fresh cash from Upstox (HTTP {funds_res.status_code})")
+    async def fetch_upstox_data(headers_dict):
+        cash = None
+        holdings = []
+        err_msg = None
+        is_auth_error = False
+        
+        try:
+            # Note: We intentionally do NOT fetch cash via get-funds-and-margin.
+            # Upstox's "available_margin" includes collateral and unsettled trades,
+            # which inaccurately overwrites the user's manual idle cash balance.
+            # Cash is left as None so the reconciler preserves the user's local input.
             
-        # B. Fetch Holdings
-        holdings_url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
-        holdings_res = await loop.run_in_executor(None, lambda: requests.get(holdings_url, headers=headers, timeout=10))
-        if holdings_res.status_code == 200:
-            upstox_holdings_raw = holdings_res.json().get("data") or []
+            # Fetch Holdings
+            holdings_url = "https://api.upstox.com/v2/portfolio/long-term-holdings"
+            loop = asyncio.get_event_loop()
+            holdings_res = await loop.run_in_executor(None, lambda: requests.get(holdings_url, headers=headers_dict, timeout=10))
+            if holdings_res.status_code == 200:
+                holdings = holdings_res.json().get("data") or []
+            elif holdings_res.status_code == 401 or "UDAPI100050" in holdings_res.text:
+                is_auth_error = True
+                err_msg = f"Holdings fetch auth failure ({holdings_res.status_code}): {holdings_res.text}"
+            else:
+                err_msg = f"Failed to fetch Upstox holdings (HTTP {holdings_res.status_code})"
+        except Exception as api_err:
+            err_msg = f"Upstox API request failed: {str(api_err)}"
+            
+        return cash, holdings, err_msg, is_auth_error
+
+    # Try 1
+    upstox_cash, upstox_holdings_raw, error_message, token_expired = await fetch_upstox_data(headers)
+    
+    # If expired, trigger auto-refresh and Try 2!
+    if token_expired:
+        logger.warning(f"Reconciliation: Upstox access token expired or invalid (Details: {error_message}). Attempting automated token refresh...")
+        refresh_success = await _trigger_upstox_auto_login()
+        if refresh_success:
+            try:
+                profile_res = supabase.table("profiles").select("broker_oauth").eq("id", user_id).execute()
+                if profile_res.data:
+                    oauth = profile_res.data[0].get("broker_oauth") or {}
+                    new_token = oauth.get("access_token")
+                    if new_token:
+                        logger.info("Reconciliation: Successfully fetched refreshed token. Retrying Upstox API requests...")
+                        headers["Authorization"] = f"Bearer {new_token}"
+                        upstox_cash, upstox_holdings_raw, error_message, token_expired = await fetch_upstox_data(headers)
+            except Exception as reload_err:
+                logger.error(f"Reconciliation: Failed to reload profile after refresh: {reload_err}")
+                error_message = f"Failed to reload profile after refresh: {str(reload_err)}"
+                
+    # Check final results
+    if error_message and (upstox_cash is None or not upstox_holdings_raw):
+        logger.error(f"Reconciliation: {error_message}")
+        report["reason"] = error_message
+        if "Failed to fetch fresh cash" in error_message:
+            report["log_messages"].append(error_message)
         else:
-            logger.error(f"Reconciliation: Failed to fetch Upstox holdings: {holdings_res.text}")
-            report["reason"] = f"Failed to fetch Upstox holdings (HTTP {holdings_res.status_code})"
             return report
-    except Exception as e:
-        logger.error(f"Reconciliation: API request failed: {e}")
-        report["reason"] = f"Upstox API request failed: {str(e)}"
-        return report
 
     # 3. Retrieve local portfolio and positions
     try:
@@ -216,11 +291,25 @@ async def reconcile_portfolio_with_upstox(user_id: str, portfolio_id: Optional[s
             report["log_messages"].append(f"Error updating position {ticker}: {str(e)}")
 
     # 6. Cache fresh quotes returned in holdings directly to market_cache
+    tickers = list(upstox_map.keys())
+    from services.pricing_engine import get_batch_price_snapshots, SECTOR_MAP
+    price_map = {}
+    if tickers:
+        try:
+            price_map = await get_batch_price_snapshots(tickers)
+        except Exception as p_err:
+            logger.error(f"Reconciliation: Failed to batch fetch prices: {p_err}")
+
     for ticker, up_pos in upstox_map.items():
         try:
             h = up_pos["raw"]
-            last_price = float(h.get("last_price") or up_pos["avg_cost"])
-            close_price = float(h.get("close_price") or last_price)
+            quote = price_map.get(ticker)
+            upstox_ltp = float(h.get("last_price") or 0.0)
+            upstox_close = float(h.get("close_price") or 0.0)
+            
+            last_price = upstox_ltp if upstox_ltp > 0 else (quote.last_price if quote else up_pos["avg_cost"])
+            close_price = upstox_close if upstox_close > 0 else (quote.previous_close if (quote and quote.previous_close) else last_price)
+                
             if close_price <= 0:
                 close_price = last_price
                 
@@ -237,7 +326,7 @@ async def reconcile_portfolio_with_upstox(user_id: str, portfolio_id: Optional[s
                 asset_type="equity",
                 currency="INR",
                 exchange=exch or "NSE",
-                sector="Government Securities" if is_gsec else "Indian Equity",
+                sector="Government Securities" if is_gsec else SECTOR_MAP.get(ticker, "Indian Equity"),
                 country="IN",
                 market_cap=None,
                 previous_close=close_price,

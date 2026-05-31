@@ -336,8 +336,8 @@ export default function SignalsPage() {
     const widthPercent = Math.min(Math.abs(value) * 100, 100);
 
     return (
-      <div className="flex flex-col gap-1.5 font-mono text-[11px] w-full">
-        <div className="flex justify-between items-center text-[10px]">
+      <div className="flex flex-col gap-1.5 font-mono text-xs w-full">
+        <div className="flex justify-between items-center text-xs">
           <span className="text-text-muted font-bold">{label}</span>
           <span className={cn("font-bold", isZero ? "text-text-muted" : isPositive ? "text-green-500" : "text-red-500")}>
             {value > 0 ? "+" : ""}{value.toFixed(2)}
@@ -368,13 +368,13 @@ export default function SignalsPage() {
       <div className="flex items-center gap-3 font-mono text-xs">
         <div className="flex items-center justify-center w-5 h-5 shrink-0">
           {state === "done" && (
-            <span className="w-5 h-5 rounded-full bg-green-500/10 border border-green-500 text-green-500 flex items-center justify-center font-bold text-[10px]">✓</span>
+            <span className="w-5 h-5 rounded-full bg-green-500/10 border border-green-500 text-green-500 flex items-center justify-center font-bold text-xs">✓</span>
           )}
           {state === "active" && (
-            <span className="w-5 h-5 rounded-full bg-accent/10 border border-accent text-accent flex items-center justify-center font-bold text-[10px] animate-spin">●</span>
+            <span className="w-5 h-5 rounded-full bg-accent/10 border border-accent text-accent flex items-center justify-center font-bold text-xs animate-spin">●</span>
           )}
           {state === "pending" && (
-            <span className="w-5 h-5 rounded-full bg-card border border-border text-text-muted flex items-center justify-center font-bold text-[10px]">○</span>
+            <span className="w-5 h-5 rounded-full bg-card border border-border text-text-muted flex items-center justify-center font-bold text-xs">○</span>
           )}
         </div>
         <span className={cn(
@@ -454,7 +454,7 @@ export default function SignalsPage() {
            <Button 
             onClick={runPrediction} 
             disabled={loading}
-            className="bg-accent hover:bg-accent/90 text-white gap-2 px-6"
+            className="bg-accent hover:bg-accent/90 text-[var(--text-primary)] gap-2 px-6"
             aria-busy={loading}
           >
             {loading ? (
@@ -474,7 +474,7 @@ export default function SignalsPage() {
         <CardSurface className="overflow-hidden flex flex-col h-[300px]">
           <div className="p-4 border-b border-border flex justify-between items-center bg-card/50">
             <h3 className="font-bold text-xs uppercase tracking-wider text-text-muted">Signal Scanner</h3>
-            <Button variant="ghost" size="sm" onClick={runScan} loading={scanning} className="h-6 text-[10px]">
+            <Button variant="ghost" size="sm" onClick={runScan} loading={scanning} className="h-6 text-xs">
               {scanning ? "" : "REFRESH"}
             </Button>
           </div>
@@ -493,7 +493,7 @@ export default function SignalsPage() {
               <div className="flex flex-col items-center justify-center text-center p-4 gap-2 my-auto">
                 <AlertTriangle className="text-red-500" size={24} />
                 <p className="text-xs text-text-muted">Signal scan failed</p>
-                <Button size="sm" variant="outline" className="h-7 text-[10px] mt-1" onClick={runScan}>
+                <Button size="sm" variant="outline" className="h-7 text-xs mt-1" onClick={runScan}>
                   Retry
                 </Button>
               </div>
@@ -501,12 +501,12 @@ export default function SignalsPage() {
               <div className="flex flex-col items-center justify-center text-center p-4 gap-2 my-auto">
                 <Activity className="text-text-muted opacity-40 animate-pulse" size={28} />
                 <p className="font-bold text-xs text-text-primary">No signals detected</p>
-                <p className="text-[10px] text-text-muted max-w-[200px] leading-relaxed">
+                <p className="text-xs text-text-muted max-w-[200px] leading-relaxed">
                   Try running the pipeline with a different ticker or timeframe.
                 </p>
               </div>
             ) : (
-              <table className="w-full text-[11px] text-left font-mono my-auto">
+              <table className="w-full text-xs text-left font-mono my-auto">
                 <thead className="text-text-muted uppercase">
                   <tr>
                     <th className="pb-3">Asset</th>
@@ -519,7 +519,7 @@ export default function SignalsPage() {
                     <tr key={i} className="border-b border-border hover:bg-card/50 cursor-pointer group" onClick={() => setTicker(r.ticker)}>
                       <td className="py-2.5 font-bold text-text-primary group-hover:text-accent transition-colors">{r.ticker}</td>
                       <td className="py-2.5">
-                        <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${getSignalColor(r.signal)}`}>
+                        <span className={`px-2 py-0.5 rounded border text-xs font-bold ${getSignalColor(r.signal)}`}>
                           {r.signal}
                         </span>
                       </td>
@@ -568,7 +568,7 @@ export default function SignalsPage() {
                   <span className="text-xl font-bold font-mono text-text-primary">{progress}%</span>
                 </div>
                 <Progress value={progress} className="h-2 bg-card/50" />
-                <p className="text-[10px] text-text-muted italic">Estimated time: ~12s per ticker</p>
+                <p className="text-xs text-text-muted italic">Estimated time: ~12s per ticker</p>
               </div>
             </div>
           ) : result ? (
@@ -619,7 +619,7 @@ export default function SignalsPage() {
                     <Minus size={48} className="fill-amber-500/20" />}
                    
                    {/* Tooltip on hover */}
-                   <div className="absolute bottom-full mb-2 hidden group-hover:block w-64 bg-card border border-border p-2.5 rounded-xl text-[10px] text-text-muted leading-relaxed font-mono shadow-2xl z-50 text-center">
+                   <div className="absolute bottom-full mb-2 hidden group-hover:block w-64 bg-card border border-border p-2.5 rounded-xl text-xs text-text-muted leading-relaxed font-mono shadow-2xl z-50 text-center">
                      Ensemble signal: aggregated from LSTM (40%), XGBoost (35%), NLP (25%)
                    </div>
                  </div>
@@ -636,7 +636,7 @@ export default function SignalsPage() {
                       <span className="text-3xl font-mono font-bold text-text-muted/30">@{(result.confidence || 0).toFixed(1)}%</span>
                     </div>
                     {/* Threshold Legend */}
-                    <div className="text-[11px] font-mono text-text-muted mt-1 select-none">
+                    <div className="text-xs font-mono text-text-muted mt-1 select-none">
                       <span className="text-green-500 font-bold">BUY ≥ 70%</span>  |  <span className="text-amber-500 font-bold">HOLD 45–69%</span>  |  <span className="text-red-500 font-bold">SELL &lt; 45%</span>
                     </div>
                  </div>
@@ -644,11 +644,11 @@ export default function SignalsPage() {
 
                <div className="grid grid-cols-2 gap-8 border-l border-border pl-8 h-24 items-center">
                   <div className="text-center">
-                    <p className="text-[10px] text-text-muted uppercase font-bold mb-1">Vol Regime</p>
+                    <p className="text-xs text-text-muted uppercase font-bold mb-1">Vol Regime</p>
                     <p className="text-lg font-bold text-text-primary uppercase">{result.risk_assessment?.volatility || "normal"}</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-[10px] text-text-muted uppercase font-bold mb-1">Position Size</p>
+                    <p className="text-xs text-text-muted uppercase font-bold mb-1">Position Size</p>
                     <p className="text-lg font-bold text-accent">{(result.risk_assessment?.suggested_position_size_pct || 0).toFixed(1)}%</p>
                   </div>
                </div>
@@ -669,7 +669,7 @@ export default function SignalsPage() {
                       <select 
                         value={forecastHorizon}
                         onChange={e => setForecastHorizon(Number(e.target.value))}
-                        className="bg-card border border-border rounded px-1.5 py-0.5 text-[9px] font-bold text-text-muted outline-none cursor-pointer"
+                        className="bg-card border border-border rounded px-1.5 py-0.5 text-xs font-bold text-text-muted outline-none cursor-pointer"
                       >
                         <option value="7">7d ▾</option>
                         <option value="14">14d ▾</option>
@@ -768,7 +768,7 @@ export default function SignalsPage() {
                     </ChartWrapper>
                   )}
                 </div>
-                <div className="flex justify-center gap-4 text-[10px] font-mono text-text-muted mt-2">
+                <div className="flex justify-center gap-4 text-xs font-mono text-text-muted mt-2">
                   <span className="flex items-center gap-1.5"><span className="w-4 h-[2px] bg-text-muted" /> Historical</span>
                   <span className="flex items-center gap-1.5"><span className="w-4 h-[2px] border-t-2 border-dashed border-accent-teal" /> Forecast</span>
                 </div>
@@ -812,7 +812,7 @@ export default function SignalsPage() {
                               fontSize={10} 
                               label={{ value: 'Confidence (%)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'var(--text-muted)', fontSize: 10 } }} 
                             />
-                            <Tooltip contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px' }} />
+                            <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }} />
                             <Bar dataKey="val" radius={[4, 4, 0, 0]} barSize={40} fillOpacity={0.85}>
                               {
                                 [
@@ -924,7 +924,7 @@ export default function SignalsPage() {
                         );
                       })}
                       
-                      <div className="flex justify-between text-[9px] text-text-muted font-mono pt-1">
+                      <div className="flex justify-between text-xs text-text-muted font-mono pt-1">
                         <span>BEARISH (-1.0)</span>
                         <span>NEUTRAL (0.0)</span>
                         <span>BULLISH (+1.0)</span>
@@ -1006,8 +1006,8 @@ export default function SignalsPage() {
                             textTransform: 'uppercase',
                             letterSpacing: '0.1em'
                           }}>R:R Ratio</span>
-                          <span className="text-text-muted text-[10px]">ⓘ</span>
-                          <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-56 bg-card border border-border p-2.5 rounded-xl text-[10px] text-text-muted leading-relaxed font-mono shadow-2xl z-50 text-left">
+                          <span className="text-text-muted text-xs">ⓘ</span>
+                          <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-56 bg-card border border-border p-2.5 rounded-xl text-xs text-text-muted leading-relaxed font-mono shadow-2xl z-50 text-left">
                             Reward-to-Risk Ratio: for every 1% risked, the model targets {(result.risk_assessment?.risk_reward_ratio || 0).toFixed(2)}% gain. A ratio above 2.0 is generally considered favorable.
                           </div>
                         </div>
@@ -1025,7 +1025,7 @@ export default function SignalsPage() {
                     <div className="col-span-2 p-4 rounded-xl border-l-[4px] border-[#EF9F27] bg-[#FAEEDA] flex gap-3 text-[13px] text-[#633806]">
                       <span className="text-lg shrink-0 mt-0.5">💡</span>
                       <div className="flex-1 space-y-3 font-mono">
-                        <p className="font-bold border-b border-[#EF9F27]/20 pb-1.5 uppercase text-[11px] tracking-wider text-[#633806]/80">Model Recommendations</p>
+                        <p className="font-bold border-b border-[#EF9F27]/20 pb-1.5 uppercase text-xs tracking-wider text-[#633806]/80">Model Recommendations</p>
                         
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
                           <span className="font-medium text-[#633806]/70">Volatility Regime</span>

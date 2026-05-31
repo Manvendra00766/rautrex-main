@@ -245,10 +245,10 @@ export default function MarketHub() {
       <div className="flex md:grid md:grid-cols-4 lg:grid-cols-8 gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar custom-scrollbar">
         {(indices ?? []).filter(Boolean).map(idx => (
           <CardSurface key={idx.name} className="p-3 flex flex-col gap-1 cursor-pointer hover:bg-card/50 transition-colors min-w-[120px] md:min-w-0" onClick={() => setTicker(idx.ticker)}>
-            <span className="text-[9px] text-text-muted font-bold uppercase tracking-widest truncate">{idx.name}</span>
+            <span className="text-xs text-text-muted font-bold uppercase tracking-widest truncate">{idx.name}</span>
             <div className="flex justify-between items-end">
               <span className="font-mono font-bold text-xs text-text-primary">{(idx.value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-              <span className={`font-mono text-[9px] font-bold ${(idx.change_percent || 0) > 0 ? 'text-positive' : 'text-negative'}`}>
+              <span className={`font-mono text-xs font-bold ${(idx.change_percent || 0) > 0 ? 'text-positive' : 'text-negative'}`}>
                 {(idx.change_percent || 0) > 0 ? '+' : ''}{(idx.change_percent || 0).toFixed(2)}%
               </span>
             </div>
@@ -265,7 +265,7 @@ export default function MarketHub() {
           <SectionHeader 
             title="Chart Config & Period" 
             icon={<BarChart2 size={16} />}
-            className="text-[10px] md:text-sm tracking-widest"
+            className="text-xs md:text-sm tracking-widest"
           />
           {configExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </button>
@@ -274,13 +274,13 @@ export default function MarketHub() {
             <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
               <div className="p-4 md:p-6 flex flex-col md:flex-row flex-wrap gap-6 md:gap-8 items-start md:items-end">
                  <div className="space-y-2 w-full md:w-auto">
-                   <p className="text-[10px] text-text-muted uppercase font-bold tracking-widest">Time Period</p>
+                   <p className="text-xs text-text-muted uppercase font-bold tracking-widest">Time Period</p>
                    <div className="flex flex-wrap gap-1 p-1 bg-card rounded-lg border border-border overflow-x-auto no-scrollbar">
                         {["1d","5d","1mo","3mo","6mo","1y","5y","max"].map(p => (
                           <button 
                             key={p} 
                             onClick={() => setPeriod(p)}
-                            className={cn("px-3 py-1.5 text-[10px] font-bold rounded-md transition-all whitespace-nowrap", period === p ? 'bg-accent text-text-primary' : 'text-text-muted hover:text-text-primary')}
+                            className={cn("px-3 py-1.5 text-xs font-bold rounded-md transition-all whitespace-nowrap", period === p ? 'bg-accent text-text-primary' : 'text-text-muted hover:text-text-primary')}
                           >
                             {p.toUpperCase()}
                           </button>
@@ -288,10 +288,10 @@ export default function MarketHub() {
                    </div>
                  </div>
                  <div className="space-y-2 w-full md:w-auto">
-                    <p className="text-[10px] text-text-muted uppercase font-bold tracking-widest">Rendering Mode</p>
+                    <p className="text-xs text-text-muted uppercase font-bold tracking-widest">Rendering Mode</p>
                     <div className="flex gap-1 p-1 bg-card rounded-lg border border-border w-fit">
-                      <button onClick={() => setChartType("line")} className={cn("px-4 py-1.5 text-[10px] font-bold rounded-md transition-all", chartType === 'line' ? 'bg-accent text-text-primary' : 'text-text-muted hover:text-text-primary')}>LINE</button>
-                      <button onClick={() => setChartType("candlestick")} className={cn("px-4 py-1.5 text-[10px] font-bold rounded-md transition-all", chartType === 'candlestick' ? 'bg-accent text-text-primary' : 'text-text-muted hover:text-text-primary')}>CANDLES</button>
+                      <button onClick={() => setChartType("line")} className={cn("px-4 py-1.5 text-xs font-bold rounded-md transition-all", chartType === 'line' ? 'bg-accent text-text-primary' : 'text-text-muted hover:text-text-primary')}>LINE</button>
+                      <button onClick={() => setChartType("candlestick")} className={cn("px-4 py-1.5 text-xs font-bold rounded-md transition-all", chartType === 'candlestick' ? 'bg-accent text-text-primary' : 'text-text-muted hover:text-text-primary')}>CANDLES</button>
                     </div>
                  </div>
               </div>
@@ -307,11 +307,11 @@ export default function MarketHub() {
             <CardSurface className="h-[300px] md:h-[450px] flex flex-col items-center justify-center text-text-muted font-mono text-xs italic gap-2">
               <span>No historical data available for {ticker}</span>
               {historyError && (
-                <span className="text-red-400 text-[10px] max-w-md text-center">
+                <span className="text-red-400 text-xs max-w-md text-center">
                   Debug: {historyError}
                 </span>
               )}
-              <Button onClick={fetchData} variant="outline" className="mt-2 text-[10px] h-7">
+              <Button onClick={fetchData} variant="outline" className="mt-2 text-xs h-7">
                 Retry
               </Button>
             </CardSurface>
@@ -326,10 +326,10 @@ export default function MarketHub() {
                 <SectionHeader 
                     title="Fundamentals" 
                     icon={<Info size={14} className="text-accent"/>}
-                    className="text-[10px] tracking-[0.2em] border-b border-border pb-3"
+                    className="text-xs tracking-[0.2em] border-b border-border pb-3"
                 />
                 {fundamentals ? (
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 font-mono text-[11px]">
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 font-mono text-xs">
                     <div className="flex justify-between border-b border-border pb-1"><span className="text-text-muted italic">Mkt Cap</span><span className="text-text-primary">{((quote?.market_cap || 0) / 1e9).toFixed(2)}B</span></div>
                     <div className="flex justify-between border-b border-border pb-1"><span className="text-text-muted italic">P/E</span><span className="text-text-primary">{(fundamentals.pe_ratio || 0).toFixed(1)}</span></div>
                     <div className="flex justify-between border-b border-border pb-1"><span className="text-text-muted italic">EPS</span><span className="text-text-primary">${(fundamentals.eps || 0).toFixed(2)}</span></div>
@@ -344,13 +344,13 @@ export default function MarketHub() {
                 <SectionHeader 
                     title="Intelligence" 
                     icon={<BookOpen size={14} className="text-accent"/>}
-                    className="text-[10px] tracking-[0.2em] border-b border-border pb-3"
+                    className="text-xs tracking-[0.2em] border-b border-border pb-3"
                 />
                 <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                    {(news ?? []).filter(Boolean).map((n, i) => (
                      <a key={i} href={n.link} target="_blank" rel="noreferrer" className="block p-3 rounded-xl bg-card hover:bg-card/50 border border-border transition-all group">
-                        <p className="text-[10px] text-text-primary font-bold mb-2 line-clamp-2 group-hover:text-accent transition-colors">{n.title}</p>
-                        <div className="flex justify-between text-[9px] text-text-muted font-mono">
+                        <p className="text-xs text-text-primary font-bold mb-2 line-clamp-2 group-hover:text-accent transition-colors">{n.title}</p>
+                        <div className="flex justify-between text-xs text-text-muted font-mono">
                            <span className="uppercase">{n.publisher}</span>
                            <span>{new Date((n.time || 0) * 1000).toLocaleDateString()}</span>
                         </div>
@@ -367,7 +367,7 @@ export default function MarketHub() {
               <SectionHeader 
                 title="Personal Watchlist" 
                 icon={<Star size={14} className="text-amber-500 fill-amber-500"/>}
-                className="text-[10px] tracking-[0.2em] mb-4"
+                className="text-xs tracking-[0.2em] mb-4"
               />
               <DragDropContext onDragEnd={onDragEnd}>
                 <Droppable droppableId="watchlist">
@@ -397,22 +397,22 @@ export default function MarketHub() {
               <SectionHeader 
                 title="Market Movers" 
                 icon={<TrendingUp size={14} className="text-accent" />}
-                className="text-[10px] tracking-[0.2em] mb-4"
+                className="text-xs tracking-[0.2em] mb-4"
               />
               <Tabs defaultValue="gainers" className="w-full flex-1 flex flex-col">
                 <TabsList className="grid grid-cols-3 bg-card border border-border h-8 mb-4">
-                  <TabsTrigger value="gainers" className="text-[9px] font-bold">GAINERS</TabsTrigger>
-                  <TabsTrigger value="losers" className="text-[9px] font-bold">LOSERS</TabsTrigger>
-                  <TabsTrigger value="active" className="text-[9px] font-bold">VOLUME</TabsTrigger>
+                  <TabsTrigger value="gainers" className="text-xs font-bold">GAINERS</TabsTrigger>
+                  <TabsTrigger value="losers" className="text-xs font-bold">LOSERS</TabsTrigger>
+                  <TabsTrigger value="active" className="text-xs font-bold">VOLUME</TabsTrigger>
                 </TabsList>
                 {['gainers', 'losers', 'active'].map(type => (
                   <TabsContent key={type} value={type} className="flex-1 overflow-auto custom-scrollbar mt-0">
                      {(movers?.[type] ?? []).filter(Boolean).map((m: any) => (
-                        <div key={m.ticker} onClick={() => setTicker(m.ticker)} className="flex justify-between items-center p-2.5 rounded-xl hover:bg-card/50 cursor-pointer font-mono text-[11px] group border border-transparent hover:border-border transition-all mb-1">
+                        <div key={m.ticker} onClick={() => setTicker(m.ticker)} className="flex justify-between items-center p-2.5 rounded-xl hover:bg-card/50 cursor-pointer font-mono text-xs group border border-transparent hover:border-border transition-all mb-1">
                           <span className="font-black text-text-primary group-hover:text-accent transition-colors">{m.ticker}</span>
                           <div className="text-right">
                              <p className="text-text-primary">${(m.price || 0).toFixed(2)}</p>
-                             <p className={cn("font-bold text-[10px]", (m.change_percent || 0) > 0 ? "text-positive" : "text-negative")}>
+                             <p className={cn("font-bold text-xs", (m.change_percent || 0) > 0 ? "text-positive" : "text-negative")}>
                                {(m.change_percent || 0) > 0 ? '+' : ''}{(m.change_percent || 0).toFixed(2)}%
                              </p>
                           </div>

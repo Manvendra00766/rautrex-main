@@ -30,6 +30,7 @@ export interface PortfolioPosition {
   weight_pct: number
   daily_return_pct: number
   change_percent: number
+  price_history?: { date: string; price: number }[]
 }
 
 export interface EquityPoint {

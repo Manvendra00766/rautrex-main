@@ -18,23 +18,14 @@ async def check_price_alerts():
     tickers = list(set([a['ticker'] for a in alerts]))
     
     try:
-        # Fetch current prices
-        downloaded = yf.download(tickers, period="1d", progress=False)
-        if downloaded.empty or 'Close' not in downloaded.columns:
-            return
-            
-        data = downloaded['Close']
-        current_prices = {}
+        from services.pricing_engine import get_batch_price_snapshots
+        price_map = await get_batch_price_snapshots(tickers)
         
-        if len(tickers) == 1:
-            if not data.empty:
-                current_prices[tickers[0]] = float(data.iloc[-1])
-        else:
-            for t in tickers:
-                if t in data.columns:
-                    ticker_data = data[t].dropna()
-                    if not ticker_data.empty:
-                        current_prices[t] = float(ticker_data.iloc[-1])
+        current_prices = {}
+        for t in tickers:
+            snap = price_map.get(t)
+            if snap:
+                current_prices[t] = float(snap.last_price)
             
         for alert in alerts:
             ticker = alert['ticker']

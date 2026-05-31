@@ -71,6 +71,7 @@ export default function ImportedPortfolioPage() {
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [casPassword, setCasPassword] = useState("")
+  const [casCashBalance, setCasCashBalance] = useState("0")
   const [uploadingCas, setUploadingCas] = useState(false)
   const [casError, setCasError] = useState<string | null>(null)
 
@@ -87,6 +88,7 @@ export default function ImportedPortfolioPage() {
       if (casPassword) {
         formData.append("password", casPassword)
       }
+      formData.append("cash_balance", parseFloat(casCashBalance || "0").toString())
 
       // Call Axios API upload directly (Axios handles multipart FormDatas automatically)
       const res = await api.post("/onboarding/upload-cas", formData, {
@@ -316,7 +318,7 @@ export default function ImportedPortfolioPage() {
         <AlertTriangle className="text-negative animate-bounce" size={40} />
         <h3 className="text-lg font-bold text-[var(--text-primary)]">Sync Load Failed</h3>
         <p className="text-sm font-mono text-text-secondary text-center max-w-md">{error}</p>
-        <Button onClick={loadPortfolio} className="bg-[#8B6F47] hover:bg-[#8B6F47]/90 text-white px-6">
+        <Button onClick={loadPortfolio} className="bg-[#8B6F47] hover:bg-[#8B6F47]/90 text-[var(--text-primary)] px-6">
           RETRY LOAD
         </Button>
       </CardSurface>
@@ -333,7 +335,7 @@ export default function ImportedPortfolioPage() {
             <Link2 size={32} className="animate-pulse" />
           </div>
           <div className="space-y-2 max-w-md">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-teal-600 bg-teal-500/10 px-3 py-1 rounded-full">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 bg-teal-500/10 px-3 py-1 rounded-full">
               Unified Live Tracking
             </span>
             <h2 className="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight pt-2">
@@ -346,14 +348,14 @@ export default function ImportedPortfolioPage() {
           
           <div className="flex flex-col sm:flex-row items-center gap-4 pt-3">
             <Link href="/onboarding">
-              <Button className="bg-[#8B6F47] hover:bg-[#8B6F47]/90 text-white font-bold px-8 h-11 tracking-wider uppercase text-xs gap-2 rounded-sm border-none shadow-md">
+              <Button className="bg-[#8B6F47] hover:bg-[#8B6F47]/90 text-[var(--text-primary)] font-bold px-8 h-11 tracking-wider uppercase text-xs gap-2 rounded-sm border-none shadow-md">
                 <Link2 size={14} /> LINK BROKER DEMAT
               </Button>
             </Link>
             <Button 
               onClick={enterSandboxDemo}
               variant="outline"
-              className="border-[#D4CEC4] hover:bg-[#EDE8DC]/50 text-text-primary font-bold px-8 h-11 tracking-wider uppercase text-xs gap-2 rounded-sm shadow-sm bg-surface"
+              className="border-[#D4CEC4] hover:bg-[#EDE8DC]/50 text-text-primary font-bold px-8 h-11 tracking-wider uppercase text-xs gap-2 rounded-sm shadow-sm bg-card"
             >
               <Activity size={14} className="text-[#8B6F47]" /> PREVIEW SANDBOX DEMO
             </Button>
@@ -363,7 +365,7 @@ export default function ImportedPortfolioPage() {
         {/* Right Column: CAS Statement PDF Uploader */}
         <CardSurface className="p-10 flex flex-col justify-between space-y-6 min-h-[480px]">
           <div className="space-y-2 text-center">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-600 bg-amber-500/10 px-3 py-1 rounded-full">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-amber-600 bg-amber-500/10 px-3 py-1 rounded-full">
               Offline Statement Sync
             </span>
             <h2 className="text-2xl font-extrabold text-[var(--text-primary)] tracking-tight pt-2">
@@ -376,7 +378,7 @@ export default function ImportedPortfolioPage() {
 
           <form onSubmit={handleCasUpload} className="space-y-4">
             {/* File Drag and Drop / Input Area */}
-            <div className="relative group border border-dashed border-[var(--border)] hover:border-teal-500/50 rounded-lg p-6 text-center transition-all bg-surface/50">
+            <div className="relative group border border-dashed border-[var(--border)] hover:border-teal-500/50 rounded-lg p-6 text-center transition-all bg-card/50">
               <input
                 type="file"
                 accept=".pdf"
@@ -399,7 +401,7 @@ export default function ImportedPortfolioPage() {
                     <p className="text-xs font-semibold text-[var(--text-primary)]">
                       {selectedFile.name}
                     </p>
-                    <p className="text-[10px] text-[var(--text-muted)]">
+                    <p className="text-xs text-[var(--text-muted)]">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                   </div>
@@ -408,7 +410,7 @@ export default function ImportedPortfolioPage() {
                     <p className="text-xs font-semibold text-[var(--text-primary)]">
                       Click or drag CAS PDF here
                     </p>
-                    <p className="text-[10px] text-[var(--text-muted)]">
+                    <p className="text-xs text-[var(--text-muted)]">
                       Supports password-protected CDSL/NSDL files
                     </p>
                   </div>
@@ -418,7 +420,7 @@ export default function ImportedPortfolioPage() {
 
             {/* Optional Password Input */}
             <div className="space-y-1.5">
-              <label htmlFor="cas-password" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
+              <label htmlFor="cas-password" className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
                 <Lock size={10} /> PDF Password (if protected)
               </label>
               <input
@@ -427,10 +429,28 @@ export default function ImportedPortfolioPage() {
                 placeholder="E.g., PAN in UPPERCASE or email"
                 value={casPassword}
                 onChange={(e) => setCasPassword(e.target.value)}
-                className="w-full bg-surface border border-[var(--border)] rounded px-3 py-2 text-xs focus:outline-none focus:border-teal-500 text-[var(--text-primary)]"
+                className="w-full bg-card border border-[var(--border)] rounded px-3 py-2 text-xs focus:outline-none focus:border-teal-500 text-[var(--text-primary)]"
               />
-              <p className="text-[9px] text-[var(--text-muted)] leading-normal">
+              <p className="text-xs text-[var(--text-muted)] leading-normal">
                 Note: Your password is used purely in-memory on the backend to decrypt the document. We never store or log it.
+              </p>
+            </div>
+
+            {/* Optional Cash Balance Input */}
+            <div className="space-y-1.5">
+              <label htmlFor="cas-cash-balance" className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1.5">
+                <DollarSign size={10} /> Spare Cash in Your Broker (Optional)
+              </label>
+              <input
+                id="cas-cash-balance"
+                type="number"
+                placeholder="E.g., 5000"
+                value={casCashBalance}
+                onChange={(e) => setCasCashBalance(e.target.value)}
+                className="w-full bg-card border border-[var(--border)] rounded px-3 py-2 text-xs focus:outline-none focus:border-teal-500 text-[var(--text-primary)]"
+              />
+              <p className="text-xs text-[var(--text-muted)] leading-normal">
+                If you have uninvested spare cash sitting in your broker account, enter it here to compute your true cash weight accurately. Defaults to ₹0.
               </p>
             </div>
 
@@ -445,10 +465,10 @@ export default function ImportedPortfolioPage() {
               type="submit"
               disabled={!selectedFile || uploadingCas}
               className={cn(
-                "w-full text-white font-bold h-11 tracking-wider uppercase text-xs rounded-sm shadow-md transition-all border-none",
+                "w-full text-[var(--text-primary)] font-bold h-11 tracking-wider uppercase text-xs rounded-sm shadow-md transition-all border-none",
                 selectedFile && !uploadingCas 
                   ? "bg-teal-600 hover:bg-teal-500" 
-                  : "bg-teal-800/40 text-white/50 cursor-not-allowed"
+                  : "bg-teal-800/40 text-[var(--text-primary)]/50 cursor-not-allowed"
               )}
             >
               {uploadingCas ? (
@@ -501,13 +521,13 @@ export default function ImportedPortfolioPage() {
       {/* Header bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border)]/40 pb-4">
         <div>
-          <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-teal-600 bg-teal-500/10 px-3 py-1 rounded-full">
+          <span className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600 bg-teal-500/10 px-3 py-1 rounded-full">
             Linked Broker Dashboard
           </span>
           <h1 className="text-3xl font-extrabold text-[var(--text-primary)] tracking-tight mt-2 flex items-center gap-2">
             Unified Portfolio Analytics <span className="text-sm font-normal text-[var(--text-muted)]">({broker.toUpperCase()})</span>
           </h1>
-          <p className="text-[10px] text-[var(--text-muted)] mt-1">
+          <p className="text-xs text-[var(--text-muted)] mt-1">
             Demat footprint synced at: {new Date(synced_at).toLocaleString("en-IN")} {isSandbox && <strong className="text-teal-600 uppercase tracking-widest ml-1">(Sandbox Mode)</strong>}
           </p>
         </div>
@@ -520,7 +540,7 @@ export default function ImportedPortfolioPage() {
               loadPortfolio()
             }} 
             variant="outline"
-            className="border-red-200 hover:bg-red-50 text-red-600 font-bold px-4 h-9 tracking-wider uppercase text-[10px] gap-2 rounded-sm"
+            className="border-red-200 hover:bg-red-50 text-red-600 font-bold px-4 h-9 tracking-wider uppercase text-xs gap-2 rounded-sm"
           >
             Exit Sandbox Preview
           </Button>
@@ -574,9 +594,9 @@ export default function ImportedPortfolioPage() {
             <Award size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Diversification Score</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Diversification Score</span>
             <p className="text-xl font-extrabold text-[var(--text-primary)] mt-0.5">{diversificationScore} / 100</p>
-            <span className="text-[9px] text-[var(--text-muted)]">{diversificationScore >= 80 ? "Optimal portfolio index" : "High concentration risks"}</span>
+            <span className="text-xs text-[var(--text-muted)]">{diversificationScore >= 80 ? "Optimal portfolio index" : "High concentration risks"}</span>
           </div>
         </div>
         
@@ -585,9 +605,9 @@ export default function ImportedPortfolioPage() {
             <ShieldAlert size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Volatility Risk Level</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Volatility Risk Level</span>
             <p className="text-xl font-extrabold text-[var(--text-primary)] mt-0.5">{riskAssessment}</p>
-            <span className="text-[9px] text-[var(--text-muted)]">Based on asset weights</span>
+            <span className="text-xs text-[var(--text-muted)]">Based on asset weights</span>
           </div>
         </div>
 
@@ -596,9 +616,9 @@ export default function ImportedPortfolioPage() {
             <Percent size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Annual Fee Leakage</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Annual Fee Leakage</span>
             <p className="text-xl font-extrabold text-red-500 mt-0.5">{formatCurrency(analysis.annual_fee_leakage)}</p>
-            <span className="text-[9px] text-[var(--text-muted)]">Weighted Expense: {analysis.weighted_expense_ratio}% p.a.</span>
+            <span className="text-xs text-[var(--text-muted)]">Weighted Expense: {analysis.weighted_expense_ratio}% p.a.</span>
           </div>
         </div>
       </CardSurface>
@@ -614,7 +634,7 @@ export default function ImportedPortfolioPage() {
             {analysis.recommendations.map((rec: any, idx: number) => (
               <CardSurface key={idx} className="p-5 border-l-[4px] border-l-teal-500 hover:shadow-md transition-all duration-300 space-y-4">
                 <div className="flex justify-between items-start">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-teal-600 bg-teal-50 px-2 py-0.5 rounded">
+                  <span className="text-xs font-bold uppercase tracking-wider text-teal-600 bg-teal-50 px-2 py-0.5 rounded">
                     {rec.category}
                   </span>
                   <Sparkles size={14} className="text-teal-600" />
@@ -624,14 +644,14 @@ export default function ImportedPortfolioPage() {
                   <h4 className="font-extrabold text-sm text-[var(--text-primary)] tracking-tight">
                     {rec.title}
                   </h4>
-                  <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                     {rec.description}
                   </p>
                 </div>
 
                  <Button 
                    onClick={() => handleExecuteRebalance(rec)}
-                   className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold h-9 text-[10px] tracking-wider uppercase rounded-sm mt-2"
+                   className="w-full bg-teal-600 hover:bg-teal-700 text-[var(--text-primary)] font-bold h-9 text-xs tracking-wider uppercase rounded-sm mt-2"
                  >
                    {rec.action}
                  </Button>
@@ -682,7 +702,7 @@ export default function ImportedPortfolioPage() {
                   </div>
                   <div className="text-right">
                     <span className="font-bold text-[var(--text-primary)]">{entry.pct.toFixed(1)}%</span>
-                    <span className="text-[10px] text-[var(--text-muted)] block">{formatCurrency(entry.value)}</span>
+                    <span className="text-xs text-[var(--text-muted)] block">{formatCurrency(entry.value)}</span>
                   </div>
                 </div>
               ))}
@@ -732,7 +752,7 @@ export default function ImportedPortfolioPage() {
               <TableHead className="font-bold">Class</TableHead>
               <TableHead className="font-bold">Sector / Category</TableHead>
               <TableHead className="font-bold text-right">Shares / Units</TableHead>
-              <TableHead className="font-bold text-right">Cost Price</TableHead>
+              <TableHead className="font-bold text-right">Buy Price</TableHead>
               <TableHead className="font-bold text-right">Current Price</TableHead>
               <TableHead className="font-bold text-right">Current Value</TableHead>
               <TableHead className="font-bold text-right">Total P&L</TableHead>
@@ -747,7 +767,7 @@ export default function ImportedPortfolioPage() {
                 <TableRow key={idx} className="hover:bg-[var(--bg-primary)]/20 transition-colors">
                   <TableCell>
                     <div className="font-extrabold text-[var(--text-primary)]">{h.ticker || h.name}</div>
-                    <div className="text-[10px] text-[var(--text-muted)] mt-0.5">{h.name}</div>
+                    <div className="text-xs text-[var(--text-muted)] mt-0.5">{h.name}</div>
                   </TableCell>
                   <TableCell className="capitalize text-xs font-mono">{h.asset_type.replace("_", " ")}</TableCell>
                   <TableCell className="text-xs text-[var(--text-muted)] font-medium">
@@ -764,7 +784,7 @@ export default function ImportedPortfolioPage() {
                     pnl >= 0 ? "text-teal-600" : "text-red-500"
                   )}>
                     <div>₹{pnl.toLocaleString()}</div>
-                    <div className="text-[9px] font-medium">{pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</div>
+                    <div className="text-xs font-medium">{pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%</div>
                   </TableCell>
                 </TableRow>
               )

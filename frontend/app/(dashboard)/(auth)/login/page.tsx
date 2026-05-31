@@ -55,7 +55,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6 bg-surface">
+      <div className="w-full max-w-md p-8 bg-card border border-black shadow-sm rounded-2xl space-y-6 bg-card">
         <div className="space-y-2 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Welcome back</h1>
           <p className="text-text-muted">Enter your credentials to access your terminal</p>
@@ -77,7 +77,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-surface border-border text-foreground"
+              className="bg-card border-border text-foreground"
             />
           </div>
           <div className="space-y-2">
@@ -97,7 +97,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-surface border-border text-foreground pr-10"
+                className="bg-card border-border text-foreground pr-10"
               />
               <button
                 type="button"
@@ -119,14 +119,14 @@ export default function LoginPage() {
             <span className="w-full border-t border-border"></span>
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-surface px-2 text-text-muted font-bold">Or continue with</span>
+            <span className="bg-card px-2 text-text-muted font-bold">Or continue with</span>
           </div>
         </div>
 
         <Button
           type="button"
           variant="outline"
-          className="w-full border-border bg-surface hover:bg-elevated/50 text-foreground"
+          className="w-full border-border bg-card hover:bg-elevated/50 text-foreground"
           onClick={handleGoogleLogin}
         >
           <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">

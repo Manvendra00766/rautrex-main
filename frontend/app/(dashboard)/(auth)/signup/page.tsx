@@ -91,6 +91,11 @@ export default function SignupPage() {
       if (data.user && data.user.identities?.length === 0) {
         setError("This email is already registered. Try logging in or resetting your password.")
         setIsLoading(false)
+      } else if (data.session) {
+        // If email confirmation is disabled in Supabase, we get an active session instantly.
+        // We redirect them straight to onboarding to begin their setup!
+        router.push('/onboarding')
+        router.refresh()
       } else {
         setSuccess(true)
         setIsLoading(false)
@@ -101,7 +106,7 @@ export default function SignupPage() {
   if (success) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="w-full max-w-md p-8 glass-panel rounded-2xl text-center space-y-4 bg-surface">
+        <div className="w-full max-w-md p-8 bg-card border border-black shadow-sm rounded-2xl text-center space-y-4 bg-card">
           <div className="mx-auto w-12 h-12 bg-positive/20 text-positive rounded-full flex items-center justify-center">
             <Check size={24} />
           </div>
@@ -120,7 +125,7 @@ export default function SignupPage() {
 
   return (
     <div className="flex items-center justify-center min-h-[80vh]">
-      <div className="w-full max-w-md p-8 glass-panel rounded-2xl space-y-6 bg-surface">
+      <div className="w-full max-w-md p-8 bg-card border border-black shadow-sm rounded-2xl space-y-6 bg-card">
         <div className="space-y-2 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Create Account</h1>
           <p className="text-text-muted">Join the next generation of quant trading</p>
@@ -141,7 +146,7 @@ export default function SignupPage() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
-              className="bg-surface border-border text-foreground"
+              className="bg-card border-border text-foreground"
             />
           </div>
           <div className="space-y-2">
@@ -153,7 +158,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-surface border-border text-foreground"
+              className="bg-card border-border text-foreground"
             />
           </div>
           <div className="space-y-2">
@@ -165,7 +170,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="bg-surface border-border text-foreground pr-10"
+                className="bg-card border-border text-foreground pr-10"
               />
               <button
                 type="button"
@@ -179,7 +184,7 @@ export default function SignupPage() {
             {password.length > 0 && (
               <div className="space-y-2 mt-2">
                 <Progress value={strength} className="h-1 bg-border" />
-                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="grid grid-cols-2 gap-2 text-xs">
                   <Requirement met={checks.length} text="8+ characters" />
                   <Requirement met={checks.upper} text="Uppercase letter" />
                   <Requirement met={checks.number} text="Contains number" />
@@ -197,7 +202,7 @@ export default function SignupPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="bg-surface border-border text-foreground"
+              className="bg-card border-border text-foreground"
             />
           </div>
 
@@ -207,7 +212,7 @@ export default function SignupPage() {
               type="checkbox"
               checked={acceptTerms}
               onChange={(e) => setAcceptTerms(e.target.checked)}
-              className="mt-1 h-4 w-4 rounded border-border bg-surface text-accent focus:ring-accent"
+              className="mt-1 h-4 w-4 rounded border-border bg-card text-accent focus:ring-accent"
             />
             <Label htmlFor="terms" className="text-xs leading-none text-text-muted font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
               I agree to the{' '}

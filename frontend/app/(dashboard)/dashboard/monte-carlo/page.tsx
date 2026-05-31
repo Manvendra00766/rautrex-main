@@ -98,7 +98,7 @@ export default function MonteCarloPage() {
            <Button 
             onClick={runSimulation} 
             loading={loading}
-            className="bg-accent hover:bg-accent/90 text-white gap-2 px-6"
+            className="bg-accent hover:bg-accent/90 text-[var(--text-primary)] gap-2 px-6"
           >
             {loading ? `RUNNING ${sims[0]} SIMS...` : <><Play size={16} fill="currentColor" /> EXECUTE PROJECTION</>}
           </Button>
@@ -126,7 +126,7 @@ export default function MonteCarloPage() {
                     <span className="text-accent font-mono text-sm font-bold">{sims[0].toLocaleString()}</span>
                   </div>
                   <Slider value={sims} onValueChange={setSims} max={10000} min={100} step={100} className="py-4" />
-                  <p className="text-[10px] text-text-muted italic">Higher samples increase accuracy but require more compute time (~3s per 5k paths).</p>
+                  <p className="text-xs text-text-muted italic">Higher samples increase accuracy but require more compute time (~3s per 5k paths).</p>
                 </div>
 
                 <div className="space-y-4">
@@ -138,7 +138,7 @@ export default function MonteCarloPage() {
                       ))}
                     </TabsList>
                   </Tabs>
-                  <p className="text-[10px] text-text-muted italic">Trading days to project into the future using GBM (Geometric Brownian Motion).</p>
+                  <p className="text-xs text-text-muted italic">Trading days to project into the future using GBM (Geometric Brownian Motion).</p>
                 </div>
 
                 <div className="space-y-4">
@@ -202,11 +202,11 @@ export default function MonteCarloPage() {
                  <div className="flex gap-4">
                     <div className="flex items-center gap-2">
                        <div className="w-3 h-3 rounded-full bg-accent" />
-                       <span className="text-[10px] text-text-muted font-bold">MEDIAN (P50)</span>
+                       <span className="text-xs text-text-muted font-bold">MEDIAN (P50)</span>
                     </div>
                     <div className="flex items-center gap-2">
                        <div className="w-3 h-3 rounded-full bg-purple-500/30" />
-                       <span className="text-[10px] text-text-muted font-bold">CONFIDENCE BANDS</span>
+                       <span className="text-xs text-text-muted font-bold">CONFIDENCE BANDS</span>
                     </div>
                  </div>
                </div>
@@ -219,7 +219,7 @@ export default function MonteCarloPage() {
                        <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={10} minTickGap={100} />
                        <YAxis domain={['auto', 'auto']} stroke="var(--text-muted)" fontSize={10} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
                        <Tooltip 
-                        contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px' }}
+                        contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }}
                         itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                         labelStyle={{ color: 'var(--text-muted)', marginBottom: '8px' }}
                        />
@@ -250,7 +250,7 @@ export default function MonteCarloPage() {
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                         <XAxis dataKey="bin" stroke="var(--text-muted)" fontSize={10} tickFormatter={(v) => `$${(v/1000).toFixed(1)}k`} />
                         <YAxis hide />
-                        <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px' }} />
+                        <Tooltip cursor={{fill: 'transparent'}} contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px' }} />
                         <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                            {results.histogram.map((entry: any, index: number) => (
                              <Cell key={index} fill={entry.bin > investment ? "rgba(0, 212, 255, 0.4)" : "rgba(239, 68, 68, 0.4)"} />

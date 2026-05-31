@@ -58,7 +58,7 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto pt-8 pb-4 border-t border-border flex flex-wrap gap-x-8 gap-y-4 justify-center md:justify-start items-center text-[11px] font-bold tracking-wider text-accent uppercase">
+      <div className="max-w-7xl mx-auto pt-8 pb-4 border-t border-border flex flex-wrap gap-x-8 gap-y-4 justify-center md:justify-start items-center text-xs font-bold tracking-wider text-accent uppercase">
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-accent" />
           Bank-Grade Security
@@ -74,10 +74,10 @@ export default function Footer() {
       </div>
 
       <div className="max-w-7xl mx-auto pt-6 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
-        <p className="text-foreground text-[10px] uppercase font-bold tracking-widest">
+        <p className="text-foreground text-xs uppercase font-bold tracking-widest">
           &copy; {new Date().getFullYear()} RAUTREX TECHNOLOGIES. ALL RIGHTS RESERVED.
         </p>
-        <p className="text-text-muted text-[10px] text-center md:text-right max-w-lg">
+        <p className="text-text-muted text-xs text-center md:text-right max-w-lg">
           Investments in securities market are subject to market risks. Read all the related documents carefully before investing.
         </p>
       </div>

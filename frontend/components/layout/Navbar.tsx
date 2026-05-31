@@ -25,7 +25,7 @@ export function Navbar() {
             placeholder="Search symbols, models or analytics..." 
             className="w-full bg-[var(--bg-base)] border border-[var(--border)] rounded-lg pl-9 pr-4 py-1.5 text-xs font-medium text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)]/20 transition-all"
           />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden lg:flex items-center gap-1 px-1.5 py-0.5 rounded border border-[var(--border-strong)] bg-[var(--bg-surface)] text-[9px] font-bold text-[var(--text-muted)]">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden lg:flex items-center gap-1 px-1.5 py-0.5 rounded border border-[var(--border-strong)] bg-[var(--bg-surface)] text-xs font-bold text-[var(--text-muted)]">
             <span className="opacity-70">⌘</span>K
           </div>
         </div>
@@ -36,11 +36,11 @@ export function Navbar() {
         <div className="hidden lg:flex items-center gap-3">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--bg-elevated)] border border-[var(--border)]">
             <div className="w-1.5 h-1.5 rounded-full bg-[var(--positive)]" />
-            <span className="text-[9px] font-bold text-[var(--text-primary)] uppercase tracking-wider">NYSE: OPEN</span>
+            <span className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">NYSE: OPEN</span>
           </div>
           <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[var(--bg-elevated)] border border-[var(--border)]">
             <div className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)] opacity-50" />
-            <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-wider">LSE: CLOSED</span>
+            <span className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">LSE: CLOSED</span>
           </div>
         </div>
 

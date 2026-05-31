@@ -50,7 +50,7 @@ export default function TickerTape() {
   if (displayItems.length === 0) {
     return (
       <div className="w-full bg-[var(--bg-surface)] rounded-sm py-2 px-4 border border-[var(--border)]">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)] font-bold">Loading market tape...</div>
+        <div className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] font-bold">Loading market tape...</div>
       </div>
     )
   }

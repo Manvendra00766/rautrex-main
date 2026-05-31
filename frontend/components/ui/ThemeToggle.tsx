@@ -61,7 +61,7 @@ export function ThemeToggle() {
         bg-[var(--bg-elevated)] 
         border border-[var(--border)]
         text-[var(--text-primary)] 
-        text-[10px] font-medium whitespace-nowrap
+        text-xs font-medium whitespace-nowrap
         opacity-0 group-hover:opacity-100 
         transition-opacity duration-150 pointer-events-none">
         {isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}

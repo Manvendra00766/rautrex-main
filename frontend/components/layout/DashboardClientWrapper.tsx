@@ -16,9 +16,9 @@ export default function DashboardClientWrapper({
   if (!hasMounted) {
     return (
       <div className="flex h-screen overflow-hidden bg-background">
-        <div className="hidden md:flex h-full w-[260px] bg-surface border-r border-white/5 flex-col" />
+        <div className="hidden md:flex h-full w-[260px] bg-[#FDFBF7] border-r border-[var(--border)] flex-col" />
         <div className="flex-1 flex flex-col min-w-0 h-full relative">
-          <header className="h-16 border-b border-white/5 flex items-center px-6" />
+          <header className="h-16 border-b border-[var(--border)] flex items-center px-6" />
           <main className="flex-1 p-4 md:p-6 bg-background" />
         </div>
       </div>

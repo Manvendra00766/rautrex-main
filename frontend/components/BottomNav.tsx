@@ -34,7 +34,7 @@ export default function BottomNav() {
               isActive ? "text-[#8B6F47]" : "text-[#8C8278] hover:text-[var(--text-primary)]"
             )}>
               <item.icon size={18} />
-              <span className="text-[9px] font-bold uppercase tracking-tighter truncate">
+              <span className="text-xs font-bold uppercase tracking-tighter truncate">
                 {item.label}
               </span>
             </div>

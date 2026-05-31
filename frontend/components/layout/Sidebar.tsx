@@ -63,7 +63,7 @@ export function Sidebar() {
 
   return (
     <aside className={cn(
-      "hidden md:flex h-full bg-[var(--sidebar-bg)] border-r border-[var(--border)] flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative group/sidebar",
+      "hidden md:flex h-full bg-[#FDFBF7] border-r border-[var(--border)] flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative group/sidebar",
       isCollapsed ? "w-[64px]" : "w-[240px]"
     )}>
       {/* COLLAPSE TOGGLE */}
@@ -83,25 +83,18 @@ export function Sidebar() {
       </div>
 
       {/* NAVIGATION GROUPS */}
-      <nav className="flex-1 p-2 space-y-4 overflow-y-auto overflow-x-hidden custom-scrollbar">
+      <nav className="flex-1 overflow-y-auto py-8 flex flex-col gap-8 custom-scrollbar px-4">
         {navGroups.map((group, groupIdx) => (
           <div key={group.title} className="flex flex-col">
-            {/* Subtle divider and 8px gap before subsequent groups */}
-            {groupIdx > 0 && (
-              <div className="mb-2">
-                <hr className="border-[var(--border)] opacity-60 my-1 mx-2" />
-              </div>
-            )}
-            
             {/* Section label (hidden when collapsed) */}
-            {!isCollapsed ? (
-              <span className="px-3 pb-2 text-[10px] font-bold uppercase tracking-widest text-[#8C8278] select-none block">
+            {!isCollapsed && group.title ? (
+              <span className="text-xs font-bold text-[#8C8278] uppercase tracking-widest px-3 mb-4">
                 {group.title}
               </span>
             ) : null}
 
             {/* List of items */}
-            <div className="space-y-[8px] flex flex-col">
+            <div className="space-y-[12px] flex flex-col">
               {group.items.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                 return (
@@ -110,7 +103,7 @@ export function Sidebar() {
                     href={item.href}
                     title={isCollapsed ? item.label : ""}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-sm text-[11px] font-bold uppercase tracking-wider transition-all relative border-l-[3px]",
+                      "flex items-center gap-3 px-3 py-3 rounded-sm text-xs font-bold uppercase tracking-wider transition-all relative border-l-[3px]",
                       isActive 
                         ? "bg-[#EDE8DC] text-[var(--text-primary)] border-[#8B6F47]" 
                         : "text-[var(--text-secondary)] border-transparent hover:text-[var(--text-primary)] hover:bg-[#EDE8DC]/50"
@@ -133,7 +126,7 @@ export function Sidebar() {
       {/* FOOTER SYSTEM STATUS */}
       <div className={cn("p-4 border-t border-[var(--border)] flex items-center gap-2", isCollapsed ? "justify-center" : "px-4")}>
         <div className="w-2 h-2 rounded-full bg-[var(--positive)] animate-pulse shrink-0" />
-        <span className={cn("text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest transition-all", isCollapsed && "hidden")}>
+        <span className={cn("text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest transition-all", isCollapsed && "hidden")}>
           System Live
         </span>
       </div>

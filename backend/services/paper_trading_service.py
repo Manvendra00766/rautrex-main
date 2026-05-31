@@ -11,7 +11,27 @@ STARTING_CASH = 1_000_000.0
 
 class PaperTradingService:
     def fetch_price(self, ticker: str) -> float:
-        """Fetch current price using yfinance fast_info"""
+        """Fetch current price using multi-source pricing engine (with yfinance fallback)"""
+        # Try Upstox API first for Indian assets via the pricing engine
+        is_indian = ticker.endswith(".NS") or ticker.endswith(".BO") or "GS" in ticker or "GB" in ticker
+        if is_indian:
+            try:
+                import asyncio
+                from services.pricing_engine import get_batch_price_snapshots
+                
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    
+                price_map = loop.run_until_complete(get_batch_price_snapshots([ticker]))
+                snap = price_map.get(ticker)
+                if snap and snap.last_price > 0:
+                    return float(snap.last_price)
+            except Exception as upstox_err:
+                logger.warning(f"Upstox quote fetch failed for {ticker}: {upstox_err}. Falling back to yfinance.")
+
         try:
             stock = yf.Ticker(ticker)
             # Try various ways to get price from fast_info

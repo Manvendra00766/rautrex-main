@@ -7,14 +7,15 @@ from auth import get_current_user
 from supabase_client import supabase
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 router = APIRouter()
-executor = ThreadPoolExecutor(max_workers=10)
+executor = ProcessPoolExecutor(max_workers=4)
 
 async def run_calc(dcf_input: DCFInput):
-    # Wrap blocking service call in thread to keep gather concurrent
-    return await asyncio.to_thread(dcf_service.calculate_intrinsic_value, dcf_input)
+    # Wrap blocking math in a separate process to bypass GIL
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(executor, dcf_service.calculate_intrinsic_value, dcf_input)
 
 @router.post("/export-pdf")
 async def export_dcf_pdf(dcf_input: DCFInput, current_user = Depends(get_current_user)):
@@ -90,7 +91,7 @@ async def save_dcf(request: DCFSaveRequest, current_user = Depends(get_current_u
             "input_data": request.dcf_input.model_dump(),
             "output_data": request.dcf_output.model_dump()
         }
-        response = supabase.table("dcf_valuations").insert(data).execute()
+        response = current_user.db.table("dcf_valuations").insert(data).execute()
         return {"status": "success", "id": response.data[0]["id"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
@@ -99,7 +100,7 @@ async def save_dcf(request: DCFSaveRequest, current_user = Depends(get_current_u
 async def get_dcf_history(current_user = Depends(get_current_user)):
     """Fetch user's DCF valuation history"""
     try:
-        response = supabase.table("dcf_valuations") \
+        response = current_user.db.table("dcf_valuations") \
             .select("*") \
             .eq("user_id", current_user.id) \
             .order("created_at", desc=True) \
@@ -113,7 +114,7 @@ async def delete_dcf_history(id: str, current_user = Depends(get_current_user)):
     """Delete a DCF valuation from history"""
     try:
         # Check ownership
-        check = supabase.table("dcf_valuations") \
+        check = current_user.db.table("dcf_valuations") \
             .select("user_id") \
             .eq("id", id) \
             .single() \
@@ -125,7 +126,7 @@ async def delete_dcf_history(id: str, current_user = Depends(get_current_user)):
         if check.data["user_id"] != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this record")
             
-        supabase.table("dcf_valuations").delete().eq("id", id).execute()
+        current_user.db.table("dcf_valuations").delete().eq("id", id).execute()
         return {"status": "deleted"}
     except HTTPException:
         raise
@@ -157,7 +158,7 @@ async def toggle_dcf_share(id: str, is_public: bool, current_user = Depends(get_
     """Toggle public visibility of a valuation"""
     try:
         # Check ownership
-        check = supabase.table("dcf_valuations") \
+        check = current_user.db.table("dcf_valuations") \
             .select("user_id") \
             .eq("id", id) \
             .single() \
@@ -169,7 +170,7 @@ async def toggle_dcf_share(id: str, is_public: bool, current_user = Depends(get_
         if check.data["user_id"] != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to modify this record")
             
-        response = supabase.table("dcf_valuations") \
+        response = current_user.db.table("dcf_valuations") \
             .update({"is_public": is_public}) \
             .eq("id", id) \
             .execute()

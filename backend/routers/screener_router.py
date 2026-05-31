@@ -49,7 +49,7 @@ async def run_screener(request: ScreenerRequest, current_user = Depends(get_curr
 async def get_presets(current_user = Depends(get_current_user)):
     """Fetch all saved presets for the current user"""
     try:
-        response = supabase.table("screener_presets") \
+        response = current_user.db.table("screener_presets") \
             .select("*") \
             .eq("user_id", current_user.id) \
             .order("created_at", desc=True) \
@@ -67,7 +67,7 @@ async def save_preset(preset: PresetCreate, current_user = Depends(get_current_u
             "name": preset.name,
             "filters": [f.model_dump() for f in preset.filters]
         }
-        response = supabase.table("screener_presets").insert(data).execute()
+        response = current_user.db.table("screener_presets").insert(data).execute()
         if not response.data:
             raise HTTPException(status_code=500, detail="Failed to save preset")
         return response.data[0]
@@ -79,7 +79,7 @@ async def delete_preset(id: str, current_user = Depends(get_current_user)):
     """Delete a screener preset if owned by the user"""
     try:
         # Check ownership
-        check = supabase.table("screener_presets") \
+        check = current_user.db.table("screener_presets") \
             .select("user_id") \
             .eq("id", id) \
             .single() \
@@ -91,7 +91,7 @@ async def delete_preset(id: str, current_user = Depends(get_current_user)):
         if check.data["user_id"] != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this preset")
         
-        supabase.table("screener_presets").delete().eq("id", id).execute()
+        current_user.db.table("screener_presets").delete().eq("id", id).execute()
         return {"status": "deleted"}
     except HTTPException:
         raise

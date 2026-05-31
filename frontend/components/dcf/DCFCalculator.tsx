@@ -405,7 +405,7 @@ export default function DCFCalculator() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {inputs.revenue.map((rev, i) => (
                   <div key={i} className="space-y-1">
-                    <span className="text-[10px] text-text-muted uppercase font-bold">Year {i + 1}</span>
+                    <span className="text-xs text-text-muted uppercase font-bold">Year {i + 1}</span>
                     <Input 
                       type="number" 
                       step="0.01"
@@ -500,7 +500,7 @@ export default function DCFCalculator() {
             <>
               <CardSurface className="relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 flex flex-col items-end gap-2">
-                  <Badge variant={result.data_quality_score === 'HIGH' ? 'success' : result.data_quality_score === 'MEDIUM' ? 'warning' : 'error'} className="text-[10px]">
+                  <Badge variant={result.data_quality_score === 'HIGH' ? 'success' : result.data_quality_score === 'MEDIUM' ? 'warning' : 'error'} className="text-xs">
                     Data Quality: {result.data_quality_score}
                   </Badge>
                   {result.upside_downside_pct !== null && (
@@ -510,7 +510,7 @@ export default function DCFCalculator() {
                     </Badge>
                   )}
                   {result.projected_fcfs.some(f => f < 0) && (
-                    <Badge variant="error" className="text-[10px] animate-pulse">
+                    <Badge variant="error" className="text-xs animate-pulse">
                       <AlertTriangle size={10} className="mr-1" /> Negative FCF Detected
                     </Badge>
                   )}
@@ -592,9 +592,9 @@ export default function DCFCalculator() {
                   {/* Margin of Safety Zones */}
                   <div className="mt-8 space-y-3">
                     <div className="flex items-center justify-between">
-                       <span className="text-[10px] text-text-muted uppercase font-bold tracking-widest">Margin of Safety</span>
+                       <span className="text-xs text-text-muted uppercase font-bold tracking-widest">Margin of Safety</span>
                        {activeZone && (
-                         <span className="text-[10px] text-accent animate-pulse font-bold uppercase tracking-tighter">
+                         <span className="text-xs text-accent animate-pulse font-bold uppercase tracking-tighter">
                            Target: {activeZone.label}
                          </span>
                        )}
@@ -607,7 +607,7 @@ export default function DCFCalculator() {
                             key={zone.label}
                             className={`flex-1 min-w-[100px] p-2 rounded-xl border text-center transition-all ${zone.color} ${isCurrentZone ? 'ring-2 ring-accent ring-offset-2 ring-offset-surface scale-105' : 'opacity-60'}`}
                           >
-                            <div className="text-[9px] uppercase font-black mb-1">{zone.label}</div>
+                            <div className="text-xs uppercase font-black mb-1">{zone.label}</div>
                             <div className="text-xs font-bold">{formatPrice(zone.price)}</div>
                           </div>
                         );
@@ -622,7 +622,7 @@ export default function DCFCalculator() {
                       { label: 'Equity Value', value: result.equity_value },
                     ].map(item => (
                       <div key={item.label} className="p-3 rounded-xl bg-elevated/50 border border-border">
-                        <span className="text-[10px] text-text-muted uppercase block mb-1 font-bold">{item.label}</span>
+                        <span className="text-xs text-text-muted uppercase block mb-1 font-bold">{item.label}</span>
                         <span className="text-sm font-bold text-text-primary font-mono">{formatCurrency(item.value)}</span>
                       </div>
                     ))}
@@ -660,9 +660,9 @@ export default function DCFCalculator() {
                     <Table>
                       <TableHeader>
                         <TableRow className="border-border hover:bg-transparent">
-                          <TableHead className="text-[10px] uppercase font-bold text-text-muted">WACC \ TGR</TableHead>
+                          <TableHead className="text-xs uppercase font-bold text-text-muted">WACC \ TGR</TableHead>
                           {Object.keys(Object.values(result.sensitivity_table)[0]).map(tgr => (
-                            <TableHead key={tgr} className="text-[10px] uppercase font-bold text-text-muted text-center">{tgr}</TableHead>
+                            <TableHead key={tgr} className="text-xs uppercase font-bold text-text-muted text-center">{tgr}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
@@ -694,7 +694,7 @@ export default function DCFCalculator() {
                               return (
                                 <TableCell 
                                   key={i} 
-                                  className={`text-center text-[11px] py-2 transition-all border-l border-border font-mono ${cellStyle} ${isActiveInput ? 'ring-2 ring-inset ring-accent z-10' : ''}`}
+                                  className={`text-center text-xs py-2 transition-all border-l border-border font-mono ${cellStyle} ${isActiveInput ? 'ring-2 ring-inset ring-accent z-10' : ''}`}
                                 >
                                   {isActiveInput ? (
                                     <strong className="text-text-primary">{currencySymbol}{Math.round(val).toLocaleString('en-US')}</strong>
@@ -720,12 +720,12 @@ export default function DCFCalculator() {
                     ].map(item => (
                       <div key={item.label} className="flex items-center gap-2">
                         <div className={`w-3 h-3 rounded-sm ${item.color}`} />
-                        <span className="text-[9px] uppercase font-bold text-text-muted tracking-wider">{item.label}</span>
+                        <span className="text-xs uppercase font-bold text-text-muted tracking-wider">{item.label}</span>
                       </div>
                     ))}
                     <div className="flex items-center gap-2 ml-auto">
                       <div className="w-3 h-3 rounded-sm ring-1 ring-accent" />
-                      <span className="text-[9px] uppercase font-bold text-accent tracking-wider">Current Input</span>
+                      <span className="text-xs uppercase font-bold text-accent tracking-wider">Current Input</span>
                     </div>
                   </div>
                 </div>

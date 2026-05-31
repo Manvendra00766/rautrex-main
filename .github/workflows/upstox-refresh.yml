@@ -1,0 +1,46 @@
+name: Upstox Token Refresh
+
+# Runs at 3:00 UTC = 8:30 AM IST, Monday-Friday (market days only)
+on:
+  schedule:
+    - cron: '0 3 * * 1-5'
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  refresh-token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyotp playwright requests python-dotenv supabase
+          playwright install chromium --with-deps
+
+      - name: Run Upstox auto-login
+        env:
+          UPSTOX_CLIENT_ID: ${{ secrets.UPSTOX_CLIENT_ID }}
+          UPSTOX_CLIENT_SECRET: ${{ secrets.UPSTOX_CLIENT_SECRET }}
+          UPSTOX_REDIRECT_URI: ${{ secrets.UPSTOX_REDIRECT_URI }}
+          UPSTOX_USER_ID: ${{ secrets.UPSTOX_USER_ID }}
+          UPSTOX_PIN: ${{ secrets.UPSTOX_PIN }}
+          UPSTOX_TOTP_SECRET: ${{ secrets.UPSTOX_TOTP_SECRET }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python backend/scripts/auto_login_upstox.py
+
+      - name: Upload debug screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-debug-screenshots
+          path: backend/logs/*.png
+          retention-days: 3

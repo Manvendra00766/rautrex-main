@@ -52,7 +52,7 @@ class ConnectionManager:
                 del self.channel_subscriptions[channel]
         logger.debug(f"Client {client_id} unsubscribed from {channel}")
 
-    async def broadcast_to_channel(self, channel: str, message: dict):
+    async def broadcast_to_channel_local(self, channel: str, message: dict):
         if channel not in self.channel_subscriptions:
             return
             
@@ -76,6 +76,57 @@ class ConnectionManager:
                 
         for client_id in dead_clients:
             self.disconnect(client_id)
+
+    async def broadcast_to_channel(self, channel: str, message: dict):
+        """Broadcast message to all subscribers across all server nodes using Redis Pub/Sub."""
+        from infrastructure.redis_client import redis_client
+        if redis_client.redis:
+            try:
+                payload = {"channel": channel, "message": message}
+                await redis_client.redis.publish("pubsub:market:ticks", json.dumps(payload))
+            except Exception as e:
+                logger.warning(f"Failed to publish to Redis Pub/Sub backplane: {e}. Falling back to local.")
+                await self.broadcast_to_channel_local(channel, message)
+        else:
+            await self.broadcast_to_channel_local(channel, message)
+
+    async def start_pubsub_listener(self):
+        """Background listener task that pulls messages from Redis Pub/Sub and routes to local sockets."""
+        from infrastructure.redis_client import redis_client
+        logger.info("Initializing Redis Pub/Sub WebSocket subscription listener...")
+        
+        while True:
+            try:
+                if not redis_client.redis:
+                    await asyncio.sleep(2)
+                    continue
+                
+                pubsub = redis_client.redis.pubsub()
+                await pubsub.subscribe("pubsub:market:ticks")
+                logger.info("WebSocket Manager successfully subscribed to Redis Pub/Sub backplane channel 'pubsub:market:ticks'")
+                
+                while True:
+                    try:
+                        message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=5.0)
+                        if message:
+                            data_str = message.get("data")
+                            if data_str:
+                                payload = json.loads(data_str)
+                                channel = payload.get("channel")
+                                ws_message = payload.get("message")
+                                if channel and ws_message:
+                                    await self.broadcast_to_channel_local(channel, ws_message)
+                    except Exception as e:
+                        logger.warning(f"Error reading from Redis Pub/Sub channel: {e}. Reconnecting...")
+                        try:
+                            await pubsub.aclose()
+                        except Exception:
+                            pass
+                        await asyncio.sleep(1)
+                        break
+            except Exception as outer_err:
+                logger.error(f"Redis Pub/Sub connection lost inside WebSocket manager: {outer_err}. Reconnecting in 5s...")
+                await asyncio.sleep(5)
 
     async def heartbeat_loop(self):
         """Continuously check for dead connections and send pings."""

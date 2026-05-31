@@ -56,8 +56,8 @@ export default function ScreenerPage() {
     const margin = stock.dcf_margin_of_safety;
     if (margin === null || margin === undefined) return <Badge variant="secondary">N/A</Badge>;
     
-    if (margin > 30) return <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">STRONG BUY</Badge>;
-    if (margin > 10) return <Badge className="bg-teal-500 hover:bg-teal-600 text-white border-0">BUY</Badge>;
+    if (margin > 30) return <Badge className="bg-emerald-600 hover:bg-emerald-700 text-[var(--text-primary)] border-0">STRONG BUY</Badge>;
+    if (margin > 10) return <Badge className="bg-teal-500 hover:bg-teal-600 text-[var(--text-primary)] border-0">BUY</Badge>;
     if (margin > -10) return <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30">FAIR</Badge>;
     return <Badge variant="destructive" className="bg-red-500/80 hover:bg-red-600 border-0">OVERVALUED</Badge>;
   };
@@ -208,7 +208,7 @@ export default function ScreenerPage() {
                   width: '100%',
                   padding: '12px',
                   background: 'var(--accent-teal)',
-                  color: 'var(--bg-surface)',
+                  color: 'var(--bg-card)',
                   fontWeight: 600,
                   fontSize: '14px',
                   borderRadius: '8px',
@@ -249,7 +249,7 @@ export default function ScreenerPage() {
                 <div className="flex items-center gap-3">
                   <CardTitle>Screening Results</CardTitle>
                   {cacheStatus && (
-                    <Badge variant="outline" className="text-[10px] font-mono opacity-70">
+                    <Badge variant="outline" className="text-xs font-mono opacity-70">
                       {cacheStatus}
                     </Badge>
                   )}
@@ -371,7 +371,7 @@ export default function ScreenerPage() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex items-center justify-between px-2 text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
+                <div className="flex items-center justify-between px-2 text-xs text-muted-foreground font-medium uppercase tracking-wider">
                    <div className="flex gap-4">
                      <span>Showing {results.length} stocks</span>
                      <span>Avg P/E: {avgPE}</span>

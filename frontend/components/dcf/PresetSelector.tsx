@@ -80,11 +80,11 @@ export default function PresetSelector({ onApply }: PresetSelectorProps) {
               {isActive && <Check size={14} className={cn("text-white", preset.color === 'yellow' ? 'text-yellow-400' : preset.color === 'blue' ? 'text-blue-500' : 'text-green-500')} />}
             </div>
 
-            <p className="text-[10px] text-gray-400 leading-tight mb-2 line-clamp-2">
+            <p className="text-xs text-gray-400 leading-tight mb-2 line-clamp-2">
               {preset.description}
             </p>
 
-            <div className="text-[9px] font-mono text-gray-500 font-bold uppercase">
+            <div className="text-xs font-mono text-gray-500 font-bold uppercase">
               WACC {(preset.values.wacc! * 100).toFixed(0)}% · 
               TGR {(preset.values.terminal_growth_rate! * 100).toFixed(0)}% · 
               Margin {(preset.values.ebit_margin! * 100).toFixed(0)}%

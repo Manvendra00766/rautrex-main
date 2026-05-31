@@ -7,6 +7,11 @@ from core.config import settings
 from core.logger import logger
 from core.exceptions import MarketDataError
 from infrastructure.cache import cache_response
+from infrastructure.rate_limiter import TokenBucketRateLimiter
+
+from services.adapters.alpaca_adapter import AlpacaAdapter
+from services.adapters.upstox_adapter import UpstoxAdapter
+from services.adapters.oanda_adapter import OandaAdapter
 
 class CircuitState(Enum):
     CLOSED = "CLOSED"
@@ -56,62 +61,78 @@ class MarketDataService:
             limits=self.limits,
             timeout=self.timeout
         )
-        # Provider hierarchy: Polygon -> Finnhub -> yfinance (simulated via fallback_url)
-        self.providers = [
-            {"name": "Polygon", "url": settings.MARKET_DATA_PROVIDER_URL, "api_key": settings.MARKET_DATA_API_KEY},
-            {"name": "Finnhub", "url": settings.FALLBACK_MARKET_DATA_URL, "api_key": "fake_finnhub_key"},
-            {"name": "yfinance", "url": "https://query1.finance.yahoo.com/v8/finance/chart/", "api_key": None}
-        ]
+        # Dedicated thread pool strictly for slow, blocking yfinance fallback lookups
+        from concurrent.futures import ThreadPoolExecutor
+        self.fallback_executor = ThreadPoolExecutor(max_workers=20, thread_name_prefix="market_fallback")
+
+        # Concrete adapters with isolated resource thread limits
+        self.alpaca_adapter = AlpacaAdapter(executor=self.fallback_executor)
+        self.upstox_adapter = UpstoxAdapter(executor=self.fallback_executor)
+        self.oanda_adapter = OandaAdapter(executor=self.fallback_executor)
+        
         self.circuit_breaker = CircuitBreaker()
+        self.rate_limiter = TokenBucketRateLimiter(rate=5.0, capacity=5.0)
 
     async def close(self):
         await self.client.aclose()
+        await self.alpaca_adapter.client.aclose()
+        await self.upstox_adapter.client.aclose()
+        await self.oanda_adapter.client.aclose()
+        # Shutdown the thread pool executor cleanly
+        self.fallback_executor.shutdown(wait=False)
 
-    async def _fetch_from_provider(self, provider: Dict, endpoint: str, params: Optional[Dict] = None) -> Dict:
-        headers = {}
-        if provider["api_key"]:
-            headers["Authorization"] = f"Bearer {provider['api_key']}"
+    def _get_adapter(self, symbol: str):
+        symbol_upper = symbol.strip().upper()
         
-        url = f"{provider['url']}{endpoint}"
-        response = await self.client.get(url, params=params, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        # Rule A: Indian Stocks (.NS, .BO, or specific identifiers)
+        if symbol_upper.endswith(".NS") or symbol_upper.endswith(".BO") or "GS" in symbol_upper or "GB" in symbol_upper:
+            return self.upstox_adapter
+            
+        # Rule B: Commodities (matching GC=F, CL=F, SI=F, NG=F, BZ=F or CFDs)
+        commodities = {"GC=F", "CL=F", "SI=F", "NG=F", "BZ=F", "XAU_USD", "XAG_USD", "WTICO_USD", "BCO_USD"}
+        if symbol_upper in commodities:
+            return self.oanda_adapter
+            
+        # Rule C: Default US equities
+        return self.alpaca_adapter
 
     async def fetch_price(self, symbol: str) -> Dict[str, Any]:
-        """High-level fetch with circuit breaker, retries, and fallback hierarchy."""
+        """High-level fetch with circuit breaker, rate limiter, intelligent routing, and fallback adapters."""
         if not self.circuit_breaker.can_execute():
             logger.warning(f"Circuit Breaker is OPEN. Skipping fetch for {symbol}.")
-            # Fallback to stale cache or return partial data
             return await self._get_stale_data_fallback(symbol)
 
-        for provider in self.providers:
-            if not provider["url"]: continue
-            
-            try:
-                # Retry logic within a single provider
-                data = await self._fetch_with_retry(provider, symbol)
-                self.circuit_breaker.record_success()
-                return data
-            except Exception as e:
-                logger.warning(f"Provider {provider['name']} failed for {symbol}: {e}")
-                continue # Try next provider in hierarchy
-        
-        # If all providers fail
-        self.circuit_breaker.record_failure()
-        return await self._get_stale_data_fallback(symbol)
-
-    async def _fetch_with_retry(self, provider: Dict, symbol: str, max_retries: int = 3) -> Dict:
-        for attempt in range(max_retries):
-            try:
-                # Mapping symbols to provider-specific endpoints
-                endpoint = f"/stock/{symbol}/quote" if "Polygon" in provider["name"] else f"/{symbol}"
-                return await self._fetch_from_provider(provider, endpoint)
-            except (httpx.RequestError, httpx.HTTPStatusError) as e:
-                if attempt == max_retries - 1: raise e
-                wait = 2 ** attempt
-                logger.debug(f"Retrying {provider['name']} in {wait}s...")
-                await asyncio.sleep(wait)
-        raise MarketDataError("Max retries exceeded")
+        adapter = self._get_adapter(symbol)
+        try:
+            async def perform_fetch():
+                return await adapter.fetch_price(symbol)
+            snapshot = await self.rate_limiter.execute(perform_fetch)
+            if snapshot:
+                # FIXED: Check if the price was fetched via fallback to properly trip the circuit breaker
+                if getattr(snapshot, "is_fallback", False):
+                    logger.warning(f"Market data fetched via fallback for {symbol}. Recording failure on circuit breaker.")
+                    self.circuit_breaker.record_failure()
+                else:
+                    self.circuit_breaker.record_success()
+                return {
+                    "ticker": snapshot.symbol,
+                    "price": snapshot.last_price,
+                    "regularMarketPrice": snapshot.last_price,
+                    "previous_close": snapshot.previous_close,
+                    "change_amount": snapshot.change_amount,
+                    "change_percent": snapshot.change_percent,
+                    "volume": snapshot.volume,
+                    "name": snapshot.name,
+                    "currency": snapshot.currency,
+                    "source": snapshot.source,
+                    "timestamp": snapshot.fetched_at.timestamp()
+                }
+            else:
+                raise MarketDataError(f"Adapter {adapter.__class__.__name__} failed to fetch symbol {symbol}")
+        except Exception as e:
+            logger.warning(f"Adapter failed for {symbol}: {e}. Tripping circuit breaker action.")
+            self.circuit_breaker.record_failure()
+            return await self._get_stale_data_fallback(symbol)
 
     async def _get_stale_data_fallback(self, symbol: str) -> Dict:
         """Final fallback: returns structured empty data to prevent frontend crash."""
@@ -194,7 +215,7 @@ class MarketDataService:
                         results.append(d)
                 return results
 
-            res = await loop.run_in_executor(None, fetch)
+            res = await asyncio.wait_for(loop.run_in_executor(None, fetch), timeout=5.0)
             if res:
                 return res
         except Exception as e:
@@ -235,39 +256,51 @@ class MarketDataService:
             def fetch():
                 import yfinance as yf
                 pool = ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "GOOGL", "META", "NFLX", "AVGO", "SMCI", "ARM", "INTC", "COIN", "BABA"]
-                tickers = yf.Tickers(" ".join(pool))
-                stocks = []
-                for s in pool:
-                    try:
-                        ticker_obj = tickers.tickers[s]
-                        info = ticker_obj.info or {}
-                        price = info.get("regularMarketPrice") or info.get("currentPrice")
-                        change = info.get("regularMarketChangePercent")
-                        volume = info.get("regularMarketVolume") or info.get("volume")
-                        if price is not None and change is not None:
-                            stocks.append({
-                                "ticker": s,
-                                "price": float(price),
-                                "change_percent": float(change),
-                                "volume": int(volume) if volume else 0
-                            })
-                    except Exception as ex:
-                        logger.warning(f"Failed to fetch mover info for {s}: {ex}")
                 
-                if not stocks:
+                try:
+                    df = yf.download(pool, period="5d", progress=False)
+                    if df is None or df.empty:
+                        return None
+                    
+                    stocks = []
+                    for s in pool:
+                        try:
+                            if 'Close' in df and s in df['Close']:
+                                close_series = df['Close'][s].dropna()
+                                volume_series = df['Volume'][s].dropna() if 'Volume' in df and s in df['Volume'] else []
+                                
+                                if len(close_series) >= 2:
+                                    current_price = float(close_series.iloc[-1])
+                                    prev_price = float(close_series.iloc[-2])
+                                    change_pct = float(((current_price - prev_price) / prev_price) * 100)
+                                    volume = int(volume_series.iloc[-1]) if len(volume_series) > 0 else 0
+                                    
+                                    stocks.append({
+                                        "ticker": s,
+                                        "price": current_price,
+                                        "change_percent": change_pct,
+                                        "volume": volume
+                                    })
+                        except Exception as inner_ex:
+                            logger.warning(f"Failed parsing downloaded batch data for {s}: {inner_ex}")
+                    
+                    if not stocks:
+                        return None
+                        
+                    gainers = sorted([s for s in stocks if s["change_percent"] > 0], key=lambda x: x["change_percent"], reverse=True)
+                    losers = sorted([s for s in stocks if s["change_percent"] < 0], key=lambda x: x["change_percent"])
+                    active = sorted(stocks, key=lambda x: x["volume"], reverse=True)
+                    
+                    return {
+                        "gainers": gainers[:6],
+                        "losers": losers[:6],
+                        "active": active[:6]
+                    }
+                except Exception as batch_ex:
+                    logger.warning(f"Failed batch yfinance download for movers: {batch_ex}")
                     return None
-                
-                gainers = sorted([s for s in stocks if s["change_percent"] > 0], key=lambda x: x["change_percent"], reverse=True)
-                losers = sorted([s for s in stocks if s["change_percent"] < 0], key=lambda x: x["change_percent"])
-                active = sorted(stocks, key=lambda x: x["volume"], reverse=True)
-                
-                return {
-                    "gainers": gainers[:6],
-                    "losers": losers[:6],
-                    "active": active[:6]
-                }
 
-            res = await loop.run_in_executor(None, fetch)
+            res = await asyncio.wait_for(loop.run_in_executor(None, fetch), timeout=12.0)
             if res:
                 return res
         except Exception as e:

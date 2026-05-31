@@ -56,6 +56,14 @@ SECTOR_MAP = {
     "AMT": "Real Estate", "PLD": "Real Estate", "CCI": "Real Estate",
     # Utilities
     "NEE": "Utilities", "DUK": "Utilities", "SO": "Utilities", "D": "Utilities",
+    # Indian Assets Fallbacks
+    "TMPV.NS": "Automotive",
+    "HINDCOPPER.NS": "Metals & Mining",
+    "SUZLON.NS": "Renewable Energy",
+    "MIDCAPETF.NS": "Financial Services",
+    "BHARATCOAL.NS": "Energy",
+    "HDFCSML250.NS": "Financial Services",
+    "709GS2074.NS": "Government Securities",
 }
 
 
@@ -77,6 +85,7 @@ class PriceSnapshot:
     source: str
     fetched_at: datetime
     raw: Dict[str, Any]
+    is_fallback: bool = False
 
     @property
     def precision(self) -> int:
@@ -261,14 +270,17 @@ async def get_active_upstox_token() -> Optional[str]:
 
 def to_upstox_instrument_key(symbol: str) -> str:
     clean = symbol.strip().upper()
+    is_gsec = "GS" in clean or "GB" in clean or clean.startswith("709GS")
     if clean.endswith(".NS"):
         ticker = clean[:-3]
-        if "GS" in ticker or "GB" in ticker or ticker.startswith("709GS"):
-            return f"NSE_GS:{ticker}"
-        return f"NSE_EQ:{ticker}"
+        if is_gsec or "GS" in ticker or "GB" in ticker or ticker.startswith("709GS"):
+            return f"NSE_GS|{ticker}"
+        return f"NSE_EQ|{ticker}"
     elif clean.endswith(".BO"):
-        return f"BSE_EQ:{clean[:-3]}"
-    return f"NSE_EQ:{clean}"
+        return f"BSE_EQ|{clean[:-3]}"
+    if is_gsec:
+        return f"NSE_GS|{clean}"
+    return f"NSE_EQ|{clean}"
 
 
 _upstox_symbol_to_key_cache = {}
@@ -299,13 +311,13 @@ async def resolve_upstox_keys(symbols: List[str]) -> Dict[str, str]:
         
     # 2. Fallback: Download complete instruments list and build mapping
     try:
-        import requests
         import gzip
         import json
+        import httpx
         
         url = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz"
-        loop = asyncio.get_event_loop()
-        res = await loop.run_in_executor(None, lambda: requests.get(url, timeout=15))
+        async with httpx.AsyncClient() as client:
+            res = await client.get(url, timeout=15.0)
         if res.status_code == 200:
             content = gzip.decompress(res.content)
             instruments = json.loads(content)
@@ -315,7 +327,7 @@ async def resolve_upstox_keys(symbols: List[str]) -> Dict[str, str]:
                 exch = inst.get("exchange")
                 inst_key = inst.get("instrument_key")
                 if ts and exch and inst_key:
-                    suffix = ".NS" if exch == "NSE" else (".BO" if exch == "BSE" else "")
+                    suffix = ".NS" if exch in ["NSE", "NSE_GS"] else (".BO" if exch == "BSE" else "")
                     _upstox_symbol_to_key_cache[f"{ts}{suffix}"] = inst_key
                     _upstox_symbol_to_key_cache[ts] = inst_key
     except Exception as e:
@@ -325,14 +337,21 @@ async def resolve_upstox_keys(symbols: List[str]) -> Dict[str, str]:
     for s in symbols:
         if s not in _upstox_symbol_to_key_cache:
             clean = s.strip().upper()
+            is_gsec = "GS" in clean or "GB" in clean or clean.startswith("709GS")
             if clean.endswith(".NS"):
                 ticker = clean[:-3]
-                _upstox_symbol_to_key_cache[s] = f"NSE_EQ|{ticker}"
+                if is_gsec or "GS" in ticker or "GB" in ticker or ticker.startswith("709GS"):
+                    _upstox_symbol_to_key_cache[s] = f"NSE_GS|{ticker}"
+                else:
+                    _upstox_symbol_to_key_cache[s] = f"NSE_EQ|{ticker}"
             elif clean.endswith(".BO"):
                 ticker = clean[:-3]
                 _upstox_symbol_to_key_cache[s] = f"BSE_EQ|{ticker}"
             else:
-                _upstox_symbol_to_key_cache[s] = f"NSE_EQ|{clean}"
+                if is_gsec:
+                    _upstox_symbol_to_key_cache[s] = f"NSE_GS|{clean}"
+                else:
+                    _upstox_symbol_to_key_cache[s] = f"NSE_EQ|{clean}"
                 
     return {s: _upstox_symbol_to_key_cache[s] for s in symbols if s in _upstox_symbol_to_key_cache}
 
@@ -345,7 +364,7 @@ async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
         token = await get_active_upstox_token()
         if token:
             try:
-                import requests
+                import httpx
                 resolved_keys = await resolve_upstox_keys([symbol])
                 instrument_key = resolved_keys.get(symbol) or to_upstox_instrument_key(symbol)
                 
@@ -353,8 +372,8 @@ async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
                 params = {"instrument_key": instrument_key}
                 headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
                 
-                loop = asyncio.get_event_loop()
-                res = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, params=params, timeout=5))
+                async with httpx.AsyncClient() as client:
+                    res = await client.get(url, headers=headers, params=params, timeout=5.0)
                 if res.status_code == 200:
                     data = res.json().get("data") or {}
                     quote_data = data.get(instrument_key)
@@ -381,7 +400,7 @@ async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
                             asset_type="equity",
                             currency="INR",
                             exchange=instrument_key.split("|")[0] if "|" in instrument_key else (instrument_key.split(":")[0] if ":" in instrument_key else "NSE"),
-                            sector="Government Securities" if ("GS" in symbol_upper or "GB" in symbol_upper or "GS" in instrument_key or "GB" in instrument_key) else "Indian Equity",
+                            sector="Government Securities" if ("GS" in symbol_upper or "GB" in symbol_upper or "GS" in instrument_key or "GB" in instrument_key) else SECTOR_MAP.get(symbol_upper, "Indian Equity"),
                             country="IN",
                             market_cap=None,
                             previous_close=close_price,
@@ -468,7 +487,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
         token = await get_active_upstox_token()
         if token:
             try:
-                import requests
+                import httpx
                 resolved_keys = await resolve_upstox_keys(indian_missing)
                 keys_map = {}
                 for s in indian_missing:
@@ -482,8 +501,8 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                 params = {"instrument_key": instrument_keys}
                 headers = {"Accept": "application/json", "Authorization": f"Bearer {token}"}
                 
-                loop = asyncio.get_event_loop()
-                res = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, params=params, timeout=5))
+                async with httpx.AsyncClient() as client:
+                    res = await client.get(url, headers=headers, params=params, timeout=5.0)
                 if res.status_code == 200:
                     data = res.json().get("data") or {}
                     now = _utcnow()
@@ -505,7 +524,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                                 asset_type="equity",
                                 currency="INR",
                                 exchange=inst_key.split("|")[0] if "|" in inst_key else (inst_key.split(":")[0] if ":" in inst_key else "NSE"),
-                                sector="Government Securities" if ("GS" in symbol.upper() or "GB" in symbol.upper() or "GS" in inst_key or "GB" in inst_key) else "Indian Equity",
+                                sector="Government Securities" if ("GS" in symbol.upper() or "GB" in symbol.upper() or "GS" in inst_key or "GB" in inst_key) else SECTOR_MAP.get(symbol.upper(), "Indian Equity"),
                                 country="IN",
                                 market_cap=None,
                                 previous_close=close_price,
@@ -522,10 +541,10 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
             except Exception as e:
                 print(f"Error in batch Upstox Quotes API fetch: {e}")
 
-    # Re-evaluate missing symbols for yfinance fallback (Strictly exclude ALL Indian assets)
+    # Re-evaluate missing symbols for yfinance fallback (Exclude G-Sec / Gold Bonds, but allow NSE/BSE stocks/ETFs)
     still_missing = [
         s for s in missing 
-        if s not in mapping and not (s.endswith(".NS") or s.endswith(".BO") or "GS" in s or "GB" in s or s.startswith("709GS"))
+        if s not in mapping and not ("GS" in s or "GB" in s or s.startswith("709GS"))
     ]
     
     # If a G-Sec is still missing from the mapping, make sure it falls back to cache
@@ -581,10 +600,10 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                     symbol=symbol,
                     name=existing.name if existing else symbol,
                     asset_type=existing.asset_type if existing else infer_asset_type(symbol),
-                    currency=existing.currency if existing else "USD",
-                    exchange=existing.exchange if existing else None,
+                    currency=existing.currency if existing else ("INR" if (symbol.endswith(".NS") or symbol.endswith(".BO")) else "USD"),
+                    exchange=existing.exchange if existing else ("NSE" if symbol.endswith(".NS") else "BSE" if symbol.endswith(".BO") else None),
                     sector=existing.sector if (existing and existing.sector and existing.sector != "Other") else SECTOR_MAP.get(symbol.upper(), "Other"),
-                    country=existing.country if (existing and existing.country) else "US",
+                    country=existing.country if (existing and existing.country) else ("IN" if (symbol.endswith(".NS") or symbol.endswith(".BO")) else "US"),
                     market_cap=existing.market_cap if existing else None,
                     previous_close=prev_close,
                     last_price=last_price,
@@ -662,42 +681,42 @@ async def get_price_history(symbols: Iterable[str], start: date, end: date) -> D
         token = await get_active_upstox_token()
         if token:
             try:
-                import requests
+                import httpx
                 resolved_keys = await resolve_upstox_keys(indian_symbols)
-                for symbol in indian_symbols:
-                    instrument_key = resolved_keys.get(symbol) or to_upstox_instrument_key(symbol)
-                    from_str = start.isoformat()
-                    to_str = end.isoformat()
-                    # Upstox Historical Daily Candles endpoint format:
-                    # GET https://api.upstox.com/v2/historical-candle/{instrument_key}/day/{to_date}/{from_date}
-                    url = f"https://api.upstox.com/v2/historical-candle/{instrument_key}/day/{to_str}/{from_str}"
-                    headers = {
-                        "Accept": "application/json",
-                        "Authorization": f"Bearer {token}"
-                    }
-                    
-                    loop = asyncio.get_event_loop()
-                    res = await loop.run_in_executor(None, lambda: requests.get(url, headers=headers, timeout=10))
-                    if res.status_code == 200:
-                        candles = res.json().get("data", {}).get("candles") or []
-                        if candles:
-                            dates = []
-                            closes = []
-                            for c in candles:
-                                # c is [timestamp, open, high, low, close, volume, open_interest]
-                                date_str = c[0].split("T")[0]
-                                dates.append(pd.to_datetime(date_str))
-                                closes.append(float(c[4]))
-                            
-                            series = pd.Series(closes, index=dates).sort_index()
-                            histories[symbol] = series
+                async with httpx.AsyncClient() as client:
+                    for symbol in indian_symbols:
+                        instrument_key = resolved_keys.get(symbol) or to_upstox_instrument_key(symbol)
+                        from_str = start.isoformat()
+                        to_str = end.isoformat()
+                        # Upstox Historical Daily Candles endpoint format:
+                        # GET https://api.upstox.com/v2/historical-candle/{instrument_key}/day/{to_date}/{from_date}
+                        url = f"https://api.upstox.com/v2/historical-candle/{instrument_key}/day/{to_str}/{from_str}"
+                        headers = {
+                            "Accept": "application/json",
+                            "Authorization": f"Bearer {token}"
+                        }
+                        
+                        res = await client.get(url, headers=headers, timeout=10.0)
+                        if res.status_code == 200:
+                            candles = res.json().get("data", {}).get("candles") or []
+                            if candles:
+                                dates = []
+                                closes = []
+                                for c in candles:
+                                    # c is [timestamp, open, high, low, close, volume, open_interest]
+                                    date_str = c[0].split("T")[0]
+                                    dates.append(pd.to_datetime(date_str))
+                                    closes.append(float(c[4]))
+                                
+                                series = pd.Series(closes, index=dates).sort_index()
+                                histories[symbol] = series
             except Exception as e:
                 print(f"Error fetching Upstox historical candles: {e}")
                 
     # 2. Re-evaluate remaining missing symbols for yfinance fallback (Source 2 - US/Global assets only)
     still_missing = [
         s for s in unique_symbols 
-        if s not in histories and not (s.endswith(".NS") or s.endswith(".BO") or "GS" in s or "GB" in s or s.startswith("709GS"))
+        if s not in histories and not ("GS" in s or "GB" in s or s.startswith("709GS"))
     ]
     if still_missing:
         try:

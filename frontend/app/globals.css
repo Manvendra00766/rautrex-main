@@ -5,21 +5,21 @@
 @layer base {
   :root {
     /* Institutional Theme - Redesigned Warm Beige Specs */
-    --bg-primary: #F5F0E8;
-    --bg-secondary: #EDE8DC;
+    --bg-primary: #FAF9F6;
+    --bg-secondary: #F5F0E8;
     --bg-surface: #FFFFFF;
-    --bg-card: #EDE8DC;
+    --bg-card: #FDF6EC;
     
-    --border: #D4CEC4;
-    --border-strong: #8C8278;
+    --border: #EBEBE6;
+    --border-strong: #D4CEC4;
     
-    --text-primary: #1A1714;
+    --text-primary: #2B2A27;
     --text-secondary: #8C8278;
     --text-muted: #8C8278;
     
     --accent: #8B6F47;
-    --positive: #166534;
-    --negative: #991B1B;
+    --positive: #5F7055;
+    --negative: #C85D5D;
     
     --primary: var(--accent);
     --primary-foreground: #FFFFFF;
@@ -34,21 +34,21 @@
 
   /* Force dark class to use the same institutional theme to prevent flashing */
   .dark {
-    --bg-primary: #F5F0E8;
-    --bg-secondary: #EDE8DC;
+    --bg-primary: #FAF9F6;
+    --bg-secondary: #F5F0E8;
     --bg-surface: #FFFFFF;
-    --bg-card: #EDE8DC;
+    --bg-card: #FDF6EC;
     
-    --border: #D4CEC4;
-    --border-strong: #8C8278;
+    --border: #EBEBE6;
+    --border-strong: #D4CEC4;
     
-    --text-primary: #1A1714;
+    --text-primary: #2B2A27;
     --text-secondary: #8C8278;
     --text-muted: #8C8278;
     
     --accent: #8B6F47;
-    --positive: #166534;
-    --negative: #991B1B;
+    --positive: #5F7055;
+    --negative: #C85D5D;
 
     --primary: var(--accent);
     --primary-foreground: #FFFFFF;
@@ -68,7 +68,7 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-bold tracking-tight text-[var(--text-primary)];
+    @apply font-serif font-bold tracking-tight text-[var(--text-primary)];
   }
 }
 

@@ -56,16 +56,38 @@ export function usePortfolioOverview(): UsePortfolioOverviewState {
         return
       }
 
-      const data = await apiFetch(`/portfolio/overview?portfolio_id=${effectivePortfolioId}`)
-      setOverview(data)
-      positionsRef.current = data.positions || []
+      // 1. Fetch Fast-Path (Exclude History) first so layout renders instantly!
+      const fastData = await apiFetch(
+        `/portfolio/overview?portfolio_id=${effectivePortfolioId}&exclude_history=true&t=${Date.now()}`,
+        { cache: 'no-store' }
+      )
+      setOverview(fastData)
+      positionsRef.current = fastData.positions || []
       if (effectivePortfolioId !== selectedPortfolioId) {
         setSelectedPortfolioIdState(effectivePortfolioId)
       }
+      if (!isSilent) setLoading(false) // Turn off loading state once fast-path is complete!
+
+      // 2. Fetch Slow-Path (With History) in background to load curves and complex metrics seamlessly!
+      apiFetch(
+        `/portfolio/overview?portfolio_id=${effectivePortfolioId}&exclude_history=false&t=${Date.now()}`,
+        { cache: 'no-store' }
+      ).then((fullData) => {
+        setOverview((prev) => {
+          // Verify we are still looking at the same portfolio
+          if (prev && prev.portfolio && fullData && fullData.portfolio && prev.portfolio.id === fullData.portfolio.id) {
+            return fullData
+          }
+          return fullData || prev
+        })
+      }).catch((historyErr) => {
+        console.error("Failed to load historical portfolio overview in background:", historyErr)
+      })
+
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load portfolio overview")
     } finally {
-      setLoading(false)
+      if (!isSilent) setLoading(false)
     }
   }, [selectedPortfolioId])
 
