@@ -73,7 +73,19 @@ def _coerce_transaction(tx: Dict[str, Any]) -> Dict[str, Any]:
     tx["fees"] = safe_float(tx.get("fees"))
     tx["gross_amount"] = safe_float(tx.get("gross_amount"))
     tx["lot_method"] = str(tx.get("lot_method") or "FIFO").upper()
-    tx["metadata"] = tx.get("metadata") or {}
+    
+    metadata = tx.get("metadata")
+    if isinstance(metadata, str):
+        import json
+        try:
+            tx["metadata"] = json.loads(metadata)
+        except Exception:
+            tx["metadata"] = {}
+    elif isinstance(metadata, dict):
+        tx["metadata"] = metadata
+    else:
+        tx["metadata"] = {}
+        
     tx["executed_at"] = _parse_datetime(tx.get("executed_at"))
     tx["created_at"] = _parse_datetime(tx.get("created_at"))
     return tx
@@ -214,13 +226,17 @@ def compute_portfolio_state(
     transactions: List[Dict[str, Any]],
     price_map: Dict[str, PriceSnapshot],
     initial_cash: float = 0.0,
+    is_imported: bool = False,
 ) -> Dict[str, Any]:
     # FIXED: Calculate cash balance using initial_cash and trace all transactions, skipping initial_deposit to avoid double-counting
     open_lots: Dict[str, List[TaxLot]] = defaultdict(list)
     realized_pnl_by_symbol: Dict[str, float] = defaultdict(float)
     cash_balance = initial_cash
 
-    is_imported = any(tx.get("metadata", {}).get("synthetic_from_position") for tx in transactions)
+    is_imported = is_imported or any(
+        isinstance(tx.get("metadata"), dict) and tx["metadata"].get("synthetic_from_position")
+        for tx in [(_coerce_transaction(t) if not isinstance(t.get("metadata"), dict) else t) for t in transactions]
+    )
 
     for raw_tx in sorted(transactions, key=_transaction_sort_key):
         tx = _coerce_transaction(raw_tx)
@@ -891,7 +907,9 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         symbols = [tx["symbol"] for tx in transactions if tx.get("symbol")]
         price_map = await get_batch_price_snapshots(symbols) if symbols else {}
         initial_cash = safe_float(portfolio.get("initial_cash", 0.0))
-        state = compute_portfolio_state(transactions, price_map, initial_cash)
+        strategy = str(portfolio.get("strategy") or "").lower()
+        is_imported_portfolio = (strategy == "imported") or is_upstox_portfolio
+        state = compute_portfolio_state(transactions, price_map, initial_cash, is_imported=is_imported_portfolio)
 
         history_end = _utcnow().date()
         if is_upstox_portfolio:
@@ -1256,7 +1274,9 @@ async def create_transaction(
             txs = await load_transactions_for_portfolio(user_id, portfolio_id)
             # Use a dummy price map as we only care about cash
             initial_cash = safe_float(portfolio.get("initial_cash", 0.0)) if portfolio else 0.0
-            current_state = compute_portfolio_state(txs, {}, initial_cash)
+            strategy = str(portfolio.get("strategy") or "").lower() if portfolio else ""
+            is_imported_portfolio = (strategy == "imported") or ("upstox" in str(portfolio.get("name") or "").lower() if portfolio else False)
+            current_state = compute_portfolio_state(txs, {}, initial_cash, is_imported=is_imported_portfolio)
             current_cash = current_state["cash_balance"]
             
             total_cost = (quantity * price) + fees

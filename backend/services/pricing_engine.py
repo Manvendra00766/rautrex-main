@@ -553,6 +553,47 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
             if s in all_cached:
                 mapping[s] = all_cached[s]
 
+    # Try fetching from Unified Market Data Gateway (TwelveData / Alpaca) for still_missing first
+    if still_missing:
+        try:
+            from services.market_data_service import market_data_service
+            print(f"[get_batch_price_snapshots] Fetching {len(still_missing)} symbols from Unified Gateway: {still_missing}")
+            gateway_res = await market_data_service.fetch_batch(still_missing)
+            
+            for symbol in list(still_missing):
+                res = gateway_res.get(symbol)
+                # Ensure the result is valid and not stale/fallback
+                if res and res.get("status") != "stale" and res.get("price", 0.0) > 0.0:
+                    last_price = float(res.get("price"))
+                    prev_close = float(res.get("previous_close") or last_price)
+                    change_amount = float(res.get("change_amount") or 0.0)
+                    change_percent = float(res.get("change_percent") or 0.0)
+                    
+                    snap = PriceSnapshot(
+                        symbol=symbol,
+                        name=res.get("name") or symbol,
+                        asset_type="equity",
+                        currency=res.get("currency") or "INR",
+                        exchange="NSE" if symbol.endswith(".NS") else ("BSE" if symbol.endswith(".BO") else "NYSE"),
+                        sector=SECTOR_MAP.get(symbol.upper(), "Equity"),
+                        country="IN" if (symbol.endswith(".NS") or symbol.endswith(".BO")) else "US",
+                        market_cap=None,
+                        previous_close=prev_close,
+                        last_price=last_price,
+                        change_amount=change_amount,
+                        change_percent=change_percent,
+                        volume=res.get("volume"),
+                        source=res.get("source") or "twelvedata",
+                        fetched_at=_utcnow(),
+                        raw=res
+                    )
+                    mapping[symbol] = snap
+                    asyncio.create_task(upsert_cached_price(snap))
+        except Exception as gateway_err:
+            print(f"Error fetching from Unified Gateway: {gateway_err}")
+
+    still_missing = [s for s in still_missing if s not in mapping]
+
     if not still_missing:
         return mapping
 

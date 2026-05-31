@@ -617,10 +617,10 @@ export default function PortfolioLab() {
                             </td>
                             <td className="px-3 py-4 text-right text-text-secondary">{position.shares.toFixed(4).replace(/\.?0+$/, "")}</td>
                             <td className="px-3 py-4 text-right text-text-secondary">{formatCurrency(position.avg_cost_per_share)}</td>
-                            <td className="px-3 py-4 text-right text-text-primary">
+                            <td className="px-3 py-4 text-right text-text-primary whitespace-nowrap">
                               <div className="flex flex-col items-end">
-                                <span>{formatCurrency(position.live_price)}</span>
-                                {position.no_live_price && (
+                                <span className="whitespace-nowrap">{formatCurrency(position.live_price)}</span>
+                                {!!position.no_live_price && (
                                   <span className="text-[8px] text-text-muted font-normal lowercase bg-card border border-border px-1 rounded select-none">no live price</span>
                                 )}
                               </div>
