@@ -56,11 +56,7 @@ async def _get_returns_async(tickers: List[str], years: int = 2) -> pd.DataFrame
         start_d = end_d - timedelta(days=years * 365)
         
         histories = await get_price_history(tickers, start=start_d, end=end_d)
-        
-        if not histories:
-            return pd.DataFrame()
-            
-        prices = pd.DataFrame(histories)
+        prices = pd.DataFrame(histories) if histories else pd.DataFrame()
         
         # Inject synthetic fallback for any ticker that completely failed to download
         missing = [t for t in tickers if t not in prices.columns or prices[t].isna().all()]
