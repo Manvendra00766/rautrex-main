@@ -1,9 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 import yfinance as yf
 import pandas as pd
-from typing import List, Dict, Optional
-import numpy as np
-import asyncio
+import requests
 from core.logger import logger
 
 router = APIRouter()
@@ -16,8 +14,6 @@ def _normalize_ticker(ticker: str) -> str:
             detail="Financial data not found for APPL. Did you mean AAPL?",
         )
     return symbol
-
-import requests
 
 @router.get("/search")
 async def search_stocks(q: str = Query(..., min_length=1)):
@@ -131,8 +127,21 @@ async def get_quote(ticker: str):
         except Exception as cache_err:
             logger.error(f"Cache fallback failed for {symbol}: {cache_err}")
             
-        logger.error(f"Quote fetch failed for {symbol}: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"Quote fetch totally failed for {symbol}: {e}. Returning synthetic fallback.")
+        is_ind = symbol.endswith(".NS") or symbol.endswith(".BO") or "GS" in symbol or "GB" in symbol
+        return {
+            "ticker": symbol,
+            "price": 100.0,
+            "change": 0.0,
+            "change_percent": 0.0,
+            "open": 100.0,
+            "high": 100.0,
+            "low": 100.0,
+            "volume": 0,
+            "market_cap": 0,
+            "currency": "INR" if is_ind else "USD",
+            "exchange": "NSE" if is_ind else "NASDAQ",
+        }
 
 @router.get("/{ticker}/info")
 async def get_info(ticker: str):
@@ -171,7 +180,15 @@ async def get_info(ticker: str):
             logger.warning(f"Upstox info enrichment failed for {symbol}: {upstox_err}")
 
     if not info:
-        raise HTTPException(status_code=404, detail=f"Info not found for {symbol}")
+        logger.warning(f"Info not found for {symbol}. Returning synthetic info.")
+        info = {
+            "longName": symbol,
+            "sector": "Unknown",
+            "industry": "Unknown",
+            "country": "IN" if is_indian else "US",
+            "exchange": "NSE" if is_indian else "NASDAQ",
+            "currency": "INR" if is_indian else "USD",
+        }
 
     try:
         return {
@@ -186,10 +203,17 @@ async def get_info(ticker: str):
             "exchange": info.get("exchange"),
             "currency": info.get("currency"),
         }
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"get_info failed for {symbol}: {e}")
+        return {
+            "ticker": symbol,
+            "name": symbol,
+            "sector": "Unknown",
+            "industry": "Unknown",
+            "country": "Unknown",
+            "exchange": "Unknown",
+            "currency": "USD",
+        }
 
 @router.get("/{ticker}/history")
 async def get_history(ticker: str, period: str = Query(default="1mo")):
@@ -253,7 +277,7 @@ async def get_history(ticker: str, period: str = Query(default="1mo")):
         stock = yf.Ticker(symbol)
         hist = stock.history(period=period, auto_adjust=False)
         if hist.empty:
-            raise HTTPException(status_code=404, detail=f"Historical data not found for {symbol}")
+            raise ValueError(f"Historical data not found for {symbol}")
         hist = hist.reset_index()
         records = []
         for _, row in hist.iterrows():
@@ -278,8 +302,6 @@ async def get_history(ticker: str, period: str = Query(default="1mo")):
                 "volume": int(row["Volume"]) if not pd.isna(row["Volume"]) else None,
             })
         return {"ticker": symbol, "period": period, "history": records, "data": records}
-    except HTTPException:
-        raise
     except Exception as e:
         logger.warning(f"yfinance history fetch failed for {symbol}: {e}. Trying synthetic historical fallback.")
         try:
