@@ -230,18 +230,15 @@ def _optimize_with_data(tickers, method, objective, constraints_data, risk_free_
     return safe_json(res)
 
 async def get_correlation_matrix(tickers: List[str]):
-    loop = asyncio.get_event_loop()
-    def _calc():
-        returns = _get_returns(tickers, "1y")
-        if returns.empty:
-            return []
-        corr = returns.corr()
-        res = []
-        for i, t1 in enumerate(returns.columns):
-            for j, t2 in enumerate(returns.columns):
-                res.append({"x": t1, "y": t2, "v": float(corr.iloc[i, j])})
-        return safe_json(res)
-    return await loop.run_in_executor(None, _calc)
+    returns = await _get_returns_async(tickers, 1)
+    if returns.empty:
+        return []
+    corr = returns.corr()
+    res = []
+    for i, t1 in enumerate(returns.columns):
+        for j, t2 in enumerate(returns.columns):
+            res.append({"x": t1, "y": t2, "v": float(corr.iloc[i, j])})
+    return safe_json(res)
 
 # --- REBALANCING ---
 
@@ -262,8 +259,8 @@ async def calculate_rebalance(
         try:
             histories = await get_price_history(tickers, start=start_d, end=end_d)
             for t, hist in histories.items():
-                if hist:
-                    current_prices[t] = hist[-1]["close"]
+                if hist is not None and not hist.empty:
+                    current_prices[t] = float(hist.iloc[-1])
         except Exception as e:
             print(f"Error fetching prices for rebalance: {e}")
             
