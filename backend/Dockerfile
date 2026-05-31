@@ -1,28 +1,26 @@
-# Optimized Development Dockerfile for FastAPI
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Install system dependencies for build-essential/quant libraries if needed
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir prometheus-fastapi-instrumentator sentry-sdk
+
+# Copy the rest of the backend code
 COPY . .
 
-# Environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PORT=8000
+# Expose the port that FastAPI runs on (Hugging Face Spaces default is 7860)
+EXPOSE 7860
 
-# Expose port
-EXPOSE 8000
-
-# Command to run the application with hot-reload
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run the FastAPI application using uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860", "--proxy-headers"]
