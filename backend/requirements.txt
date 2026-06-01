@@ -1,3 +1,5 @@
+aiosqlite
+alembic
 slowapi
 fastapi
 uvicorn
@@ -21,8 +23,6 @@ httpx
 sse-starlette
 websockets
 sqlalchemy
-aiosqlite
-alembic
 asyncpg
 apscheduler
 greenlet

@@ -14,7 +14,7 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir prometheus-fastapi-instrumentator sentry-sdk
+RUN pip install --no-cache-dir prometheus-fastapi-instrumentator sentry-sdk aiosqlite alembic
 
 # Copy the rest of the backend code
 COPY . .
