@@ -228,7 +228,18 @@ async def rebalance_portfolio(
         )
         return JSONResponse(content=safe_json(res))
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        # Return graceful failure instead of HTTP 400 to prevent frontend crashes
+        logger.warning(f"Rebalance calculation failed: {ve}")
+        return JSONResponse(content=safe_json({
+            "current_weights": {p.ticker: 0 for p in req.current_positions},
+            "target_weights": req.target_weights,
+            "post_rebalance_weights": {},
+            "drift": {},
+            "trades": [],
+            "total_value": req.total_value or 0,
+            "error": str(ve),
+            "warning": "Rebalance calculation failed due to missing price data. Please try again later."
+        }))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -247,7 +258,17 @@ async def backtest_rebalance_route(
         )
         return JSONResponse(content=safe_json(res))
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        # Return graceful failure instead of HTTP 400
+        logger.warning(f"Rebalance backtest failed: {ve}")
+        return JSONResponse(content=safe_json({
+            "no_rebalance": {"total_return": 0, "ann_return": 0, "vol": 0, "sharpe": 0, "max_dd": 0},
+            "rebalanced": {"total_return": 0, "ann_return": 0, "vol": 0, "sharpe": 0, "max_dd": 0},
+            "annual_metrics": [],
+            "total_rebalancing_costs": 0,
+            "equity_curve": [],
+            "error": str(ve),
+            "warning": "Backtest failed due to insufficient historical data for one or more tickers."
+        }))
     except Exception as e:
         import traceback
         print(traceback.format_exc())

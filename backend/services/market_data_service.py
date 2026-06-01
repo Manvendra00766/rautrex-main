@@ -14,6 +14,8 @@ from services.adapters.upstox_adapter import UpstoxAdapter
 from services.adapters.twelvedata_adapter import TwelveDataAdapter
 from services.nse_handler import nse_handler
 from services.market_data_policy import allow_yfinance_fallback
+from services.google_finance_service import google_finance_service
+from services.bond_service import bond_service
 
 class CircuitState(Enum):
     CLOSED = "CLOSED"
@@ -101,10 +103,11 @@ class MarketDataService:
         return self.alpaca_adapter
 
     async def fetch_price(self, symbol: str) -> Dict[str, Any]:
-        """Layered fetch: Redis -> Angel One -> NSE -> yfinance -> Stale Cache."""
+        """Layered fetch: Redis -> Angel One -> Upstox -> Google Finance -> FBIL -> yfinance -> Stale Cache."""
         symbol_upper = symbol.strip().upper()
 
-        is_indian = symbol_upper.endswith(".NS") or symbol_upper.endswith(".BO") or "GS" in symbol_upper or "GB" in symbol_upper
+        is_indian = symbol_upper.endswith(".NS") or symbol_upper.endswith(".BO") or "GS" in symbol_upper or "GB" in symbol_upper or symbol_upper.startswith("709GS")
+        is_gsec = "GS" in symbol_upper or "GB" in symbol_upper or symbol_upper.startswith("709GS")
 
         if not is_indian:
             adapter = self._get_adapter(symbol)
@@ -118,7 +121,33 @@ class MarketDataService:
 
         # --- Layered Fetch for Indian Assets ---
 
-        # 1. Try Angel One
+        # 1. SPECIAL CASE: Indian Government Bonds (G-Secs)
+        if is_gsec:
+            try:
+                bond_data = await bond_service.fetch_gsec_yields()
+                yields = bond_data.get("yields", {})
+                bond_yield = yields.get("10Y", 7.15)
+                if "5Y" in symbol_upper: bond_yield = yields.get("5Y", bond_yield)
+                elif "2Y" in symbol_upper: bond_yield = yields.get("2Y", bond_yield)
+                elif "91D" in symbol_upper: bond_yield = yields.get("91D", bond_yield)
+                
+                return {
+                    "ticker": symbol_upper,
+                    "price": bond_yield,
+                    "regularMarketPrice": bond_yield,
+                    "previous_close": bond_yield,
+                    "change_amount": 0.0,
+                    "change_percent": 0.0,
+                    "volume": 0,
+                    "name": f"Govt of India Bond ({symbol_upper})",
+                    "currency": "INR",
+                    "source": "FBIL",
+                    "timestamp": time.time()
+                }
+            except Exception as e:
+                logger.warning(f"FBIL bond fetch failed for {symbol_upper}: {e}")
+
+        # 2. Try Angel One (Fast Official Quote)
         try:
             snap = await self.angelone_adapter.fetch_price(symbol_upper)
             if snap:
@@ -126,7 +155,35 @@ class MarketDataService:
         except Exception as e:
             logger.warning(f"Angel One fetch failed for {symbol_upper}: {e}")
 
-        # 2. Try NSE Unofficial
+        # 3. Try Upstox (First Party Broker Truth)
+        try:
+            snap = await self.upstox_adapter.fetch_price(symbol_upper)
+            if snap and not getattr(snap, 'is_fallback', False):
+                return self._map_snapshot(snap)
+        except Exception as e:
+            logger.warning(f"Upstox fetch failed for {symbol_upper}: {e}")
+
+        # 4. Fallback to Google Finance (Free & Reliable for Indian Assets)
+        try:
+            gf_snap = await google_finance_service.fetch_price(symbol_upper)
+            if gf_snap:
+                return {
+                    "ticker": symbol_upper,
+                    "price": gf_snap["price"],
+                    "regularMarketPrice": gf_snap["price"],
+                    "previous_close": gf_snap["previous_close"],
+                    "change_amount": gf_snap["change_amount"],
+                    "change_percent": gf_snap["change_percent"],
+                    "volume": 0,
+                    "name": gf_snap["name"],
+                    "currency": "INR",
+                    "source": "Google Finance",
+                    "timestamp": gf_snap["timestamp"]
+                }
+        except Exception as e:
+            logger.warning(f"Google Finance fallback failed for {symbol_upper}: {e}")
+
+        # 5. Try NSE Unofficial
         try:
             nse_data = nse_handler.fetch_quote(symbol_upper)
             if nse_data:
@@ -144,7 +201,7 @@ class MarketDataService:
         except Exception as e:
             logger.warning(f"NSE fetch failed for {symbol_upper}: {e}")
 
-        # 3. Try yfinance (via UpstoxAdapter's fallback mechanism)
+        # 6. Try yfinance (Last Resort)
         try:
             snap = await self.upstox_adapter._fetch_fallback_yfinance(symbol_upper)
             if snap:
@@ -152,7 +209,7 @@ class MarketDataService:
         except Exception as e:
             logger.warning(f"yfinance fallback failed for {symbol_upper}: {e}")
 
-        # 4. Final Fallback: Stale Cache / Graceful object
+        # 7. Final Fallback: Stale Cache / Graceful object
         return await self._get_stale_data_fallback(symbol)
 
     def _map_snapshot(self, snapshot) -> Dict[str, Any]:

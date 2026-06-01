@@ -101,11 +101,36 @@ async def optimize_portfolio_logic(
     constraints: Optional[Dict] = None,
     risk_free_rate: float = 0.065
 ):
-    # Fetch Data Asynchronously using Upstox API
-    returns = await _get_returns_async(tickers, 2)
-    
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _optimize_with_data, tickers, method, objective, constraints, risk_free_rate, returns)
+    try:
+        # Fetch Data Asynchronously
+        returns = await _get_returns_async(tickers, 2)
+        
+        if returns.empty or (len(returns) < 2):
+             # Graceful fallback for insufficient data
+             n = len(tickers)
+             return {
+                "optimal_weights": {t: 1.0/n for t in tickers},
+                "weight_details": [{"ticker": t, "weight": 1.0/n, "expected_return": 0, "volatility": 0, "risk_contribution": 0} for t in tickers],
+                "metrics": {"return": 0, "volatility": 0, "sharpe": 0},
+                "frontier": [],
+                "random_portfolios": [],
+                "warning": "Insufficient historical data found for optimization. Using equal weights."
+            }
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _optimize_with_data, tickers, method, objective, constraints, risk_free_rate, returns)
+    except Exception as e:
+        print(f"Global Optimization Error: {e}")
+        n = len(tickers) if tickers else 1
+        return {
+            "optimal_weights": {t: 1.0/n for t in tickers} if tickers else {},
+            "weight_details": [],
+            "metrics": {"return": 0, "volatility": 0, "sharpe": 0},
+            "frontier": [],
+            "random_portfolios": [],
+            "error": str(e),
+            "warning": "Optimization engine encountered an error. Falling back to default allocation."
+        }
 
 def _optimize_with_data(tickers, method, objective, constraints_data, risk_free_rate, returns):
     

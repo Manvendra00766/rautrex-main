@@ -34,6 +34,7 @@ import { useToast } from "@/components/ui/Toast"
 import { usePortfolioOverview } from "@/lib/use-portfolio-overview"
 import api, { apiFetch } from "@/lib/api"
 import type { PortfolioPosition, PortfolioSummary, EquityPoint, AllocationBucket } from "@/lib/types"
+import ChartWrapper from '@/components/ChartWrapper';
 
 // --- TYPES ---
 interface Message {
@@ -890,11 +891,12 @@ export default function RedesignedDashboard() {
               {/* Recharts Area Chart with real equity curve data */}
               <div className="flex-1 w-full min-h-[250px] relative">
                 {hasChartData ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                    <AreaChart 
-                      data={chartData} 
-                      margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
-                    >
+                  <ChartWrapper height={250}>
+                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                      <AreaChart 
+                        data={chartData} 
+                        margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                      >
                       <defs>
                         <linearGradient id="creamGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#C9A96E" stopOpacity={0.15}/>
@@ -1172,41 +1174,43 @@ export default function RedesignedDashboard() {
                       {/* Real Recharts LineChart Sparkline */}
                       <div className="w-full h-10 my-3">
                         {pos.price_history && pos.price_history.length > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                            <LineChart data={pos.price_history}>
-                              <Line
-                                type="monotone"
-                                dataKey="price"
-                                stroke={pnlPositive ? "#5F7055" : "#C85D5D"}
-                                strokeWidth={1.5}
-                                dot={false}
-                              />
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: "#FFFFFF",
-                                  border: "1px solid #EBEBE6",
-                                  borderRadius: "4px",
-                                  boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
-                                  fontSize: "9px",
-                                  padding: "4px"
-                                }}
-                                labelStyle={{ color: "#8C8278", fontWeight: "bold" }}
-                                itemStyle={{ color: "#8B6F47", fontWeight: "bold", padding: 0 }}
-                                formatter={(value: number) => [`₹${value.toFixed(2)}`, "Price"]}
-                                labelFormatter={(label, payload) => {
-                                  const dateVal = payload?.[0]?.payload?.date
-                                  if (dateVal) {
-                                    try {
-                                      return new Date(dateVal).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-                                    } catch {
-                                      return dateVal
+                          <ChartWrapper height={40}>
+                            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                              <LineChart data={pos.price_history}>
+                                <Line
+                                  type="monotone"
+                                  dataKey="price"
+                                  stroke={pnlPositive ? "#5F7055" : "#C85D5D"}
+                                  strokeWidth={1.5}
+                                  dot={false}
+                                />
+                                <Tooltip
+                                  contentStyle={{
+                                    backgroundColor: "#FFFFFF",
+                                    border: "1px solid #EBEBE6",
+                                    borderRadius: "4px",
+                                    boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
+                                    fontSize: "9px",
+                                    padding: "4px"
+                                  }}
+                                  labelStyle={{ color: "#8C8278", fontWeight: "bold" }}
+                                  itemStyle={{ color: "#8B6F47", fontWeight: "bold", padding: 0 }}
+                                  formatter={(value: number) => [`₹${value.toFixed(2)}`, "Price"]}
+                                  labelFormatter={(label, payload) => {
+                                    const dateVal = payload?.[0]?.payload?.date
+                                    if (dateVal) {
+                                      try {
+                                        return new Date(dateVal).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                                      } catch {
+                                        return dateVal
+                                      }
                                     }
-                                  }
-                                  return ""
-                                }}
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
+                                    return ""
+                                  }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </ChartWrapper>
                         ) : (
                           <div className="flex items-center justify-center h-full text-xs text-[#8C8278] font-bold uppercase tracking-wider bg-background rounded border border-[#EBEBE6] border-dashed">
                             No Price History
@@ -1289,16 +1293,18 @@ export default function RedesignedDashboard() {
 
                   {/* Dynamic Projection Chart */}
                   <div className="w-20 h-16 bg-background border border-black rounded-lg p-2 shrink-0 flex items-center justify-center">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                      <LineChart data={[
-                        { name: 'Now', value: portfolioValue },
-                        { name: 'M1', value: portfolioValue + (expectedProjection - portfolioValue) * 0.33 },
-                        { name: 'M2', value: portfolioValue + (expectedProjection - portfolioValue) * 0.66 },
-                        { name: 'M3', value: expectedProjection }
-                      ]}>
-                        <Line type="monotone" dataKey="value" stroke="#C9A96E" strokeWidth={2.5} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <ChartWrapper height={60}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                        <LineChart data={[
+                          { name: 'Now', value: portfolioValue },
+                          { name: 'M1', value: portfolioValue + (expectedProjection - portfolioValue) * 0.33 },
+                          { name: 'M2', value: portfolioValue + (expectedProjection - portfolioValue) * 0.66 },
+                          { name: 'M3', value: expectedProjection }
+                        ]}>
+                          <Line type="monotone" dataKey="value" stroke="#C9A96E" strokeWidth={2.5} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </ChartWrapper>
                   </div>
                 </div>
               </div>
@@ -1468,11 +1474,13 @@ export default function RedesignedDashboard() {
                         {/* Mini Sparkline or Dashed line if no history */}
                         <div className="w-10 h-4">
                           {item.price_history && item.price_history.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-                              <LineChart data={item.price_history}>
-                                <Line type="monotone" dataKey="price" stroke={isPositive ? "#5F7055" : "#C85D5D"} strokeWidth={1.5} dot={false} />
-                              </LineChart>
-                            </ResponsiveContainer>
+                            <ChartWrapper height={16}>
+                              <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+                                <LineChart data={item.price_history}>
+                                  <Line type="monotone" dataKey="price" stroke={isPositive ? "#5F7055" : "#C85D5D"} strokeWidth={1.5} dot={false} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </ChartWrapper>
                           ) : (
                             <svg className="w-full h-full" viewBox="0 0 40 15">
                               <line x1="0" y1="7.5" x2="40" y2="7.5" stroke="#8C8278" strokeWidth="1" strokeDasharray="2 2" />

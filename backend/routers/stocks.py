@@ -43,13 +43,39 @@ async def search_stocks(q: str = Query(..., min_length=1)):
 async def get_quote(ticker: str):
     symbol = _normalize_ticker(ticker)
     try:
+        from services.pricing_engine import get_price_snapshot
+        # Use get_price_snapshot for unified, robust fetching with fallbacks (Google, FBIL, etc.)
+        snapshot = await get_price_snapshot(symbol)
+        
+        if snapshot:
+            return {
+                "ticker": snapshot.symbol,
+                "price": snapshot.last_price,
+                "regularMarketPrice": snapshot.last_price,
+                "change": snapshot.change_amount,
+                "change_percent": snapshot.change_percent,
+                "previous_close": snapshot.previous_close,
+                "open": snapshot.previous_close, # fallback
+                "high": snapshot.last_price,
+                "low": snapshot.last_price,
+                "volume": snapshot.volume,
+                "market_cap": snapshot.market_cap,
+                "currency": snapshot.currency,
+                "exchange": snapshot.exchange,
+                "name": snapshot.name,
+                "source": snapshot.source,
+                "timestamp": snapshot.fetched_at.timestamp(),
+                "stale": False
+            }
+        
+        # Fallback to market_data_service if snapshot fails
         from services.market_data_service import market_data_service
         quote = await market_data_service.fetch_price(symbol)
-
         return {
             "ticker": symbol,
             "price": quote.get("price"),
-            "change": quote.get("change_amount"),
+            "regularMarketPrice": quote.get("price"),
+            "change": quote.get("change_amount") or quote.get("change"),
             "change_percent": quote.get("change_percent"),
             "open": quote.get("open") or quote.get("price"),
             "high": quote.get("high") or quote.get("price"),
@@ -65,8 +91,9 @@ async def get_quote(ticker: str):
         return {
             "ticker": symbol,
             "price": 0.0,
+            "regularMarketPrice": 0.0,
             "stale": True,
-            "error": "Unexpected error in quote endpoint"
+            "error": str(e)
         }
 
 @router.get("/{ticker}/info")
