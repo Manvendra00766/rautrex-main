@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from services.portfolio_engine import compute_portfolio_state
+from services.portfolio_engine import build_equity_curve, compute_portfolio_state
 from services.pricing_engine import PriceSnapshot
 
 
@@ -109,3 +109,80 @@ def test_lifo_realized_pnl_uses_newest_lot():
     assert round(state["total_realized_pnl"], 2) == 300.00
     assert round(position["avg_cost_per_share"], 2) == 100.00
     assert round(position["cost_basis"], 2) == 1000.00
+
+
+def test_imported_ledger_without_deposit_gets_opening_cash_baseline():
+    transactions = [
+        {
+            "transaction_type": "BUY",
+            "symbol": "RELIANCE.NS",
+            "quantity": 10,
+            "price": 2400,
+            "fees": 0,
+            "executed_at": "2026-05-01T00:00:00+00:00",
+        },
+        {
+            "transaction_type": "BUY",
+            "symbol": "TCS.NS",
+            "quantity": 5,
+            "price": 3200,
+            "fees": 0,
+            "executed_at": "2026-05-02T00:00:00+00:00",
+        },
+    ]
+    prices = {
+        "RELIANCE.NS": make_snapshot("RELIANCE.NS", last_price=2500, previous_close=2450),
+        "TCS.NS": make_snapshot("TCS.NS", last_price=3300, previous_close=3250),
+    }
+
+    state = compute_portfolio_state(transactions, prices, initial_cash=0.0, is_imported=True)
+
+    assert round(state["cash_balance"], 2) == 0.00
+    assert round(state["total_market_value"], 2) == 41500.00
+    assert round(state["total_nav"], 2) == 41500.00
+
+
+def test_imported_equity_curve_uses_same_opening_cash_baseline():
+    transactions = [
+        {
+            "transaction_type": "BUY",
+            "symbol": "RELIANCE.NS",
+            "quantity": 10,
+            "price": 2400,
+            "fees": 0,
+            "executed_at": "2026-05-01T00:00:00+00:00",
+        },
+    ]
+    prices = {"RELIANCE.NS": make_snapshot("RELIANCE.NS", last_price=2500, previous_close=2450)}
+
+    curve = build_equity_curve(
+        transactions,
+        price_history={},
+        end_date=date(2026, 5, 2),
+        initial_cash=0.0,
+        price_map=prices,
+        is_imported=True,
+    )
+
+    assert round(curve[-1]["cash_balance"], 2) == 0.00
+    assert round(curve[-1]["nav"], 2) == 25000.00
+
+
+def test_synthetic_position_transactions_do_not_inflate_cash():
+    transactions = [
+        {
+            "transaction_type": "BUY",
+            "symbol": "RELIANCE.NS",
+            "quantity": 10,
+            "price": 2400,
+            "fees": 0,
+            "executed_at": "2026-05-01T00:00:00+00:00",
+            "metadata": {"synthetic_from_position": True},
+        },
+    ]
+    prices = {"RELIANCE.NS": make_snapshot("RELIANCE.NS", last_price=2500, previous_close=2450)}
+
+    state = compute_portfolio_state(transactions, prices, initial_cash=0.0, is_imported=True)
+
+    assert round(state["cash_balance"], 2) == 0.00
+    assert round(state["total_nav"], 2) == 25000.00

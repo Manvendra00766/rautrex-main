@@ -34,11 +34,41 @@ ALTER TABLE public.paper_positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.paper_orders ENABLE ROW LEVEL SECURITY;
 
 -- Policies
-CREATE POLICY paper_accounts_user_policy ON public.paper_accounts
-    FOR ALL USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'paper_accounts'
+          AND policyname = 'paper_accounts_user_policy'
+    ) THEN
+        CREATE POLICY paper_accounts_user_policy ON public.paper_accounts
+            FOR ALL USING (auth.uid() = user_id);
+    END IF;
+END $$;
 
-CREATE POLICY paper_positions_user_policy ON public.paper_positions
-    FOR ALL USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'paper_positions'
+          AND policyname = 'paper_positions_user_policy'
+    ) THEN
+        CREATE POLICY paper_positions_user_policy ON public.paper_positions
+            FOR ALL USING (auth.uid() = user_id);
+    END IF;
+END $$;
 
-CREATE POLICY paper_orders_user_policy ON public.paper_orders
-    FOR ALL USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'paper_orders'
+          AND policyname = 'paper_orders_user_policy'
+    ) THEN
+        CREATE POLICY paper_orders_user_policy ON public.paper_orders
+            FOR ALL USING (auth.uid() = user_id);
+    END IF;
+END $$;

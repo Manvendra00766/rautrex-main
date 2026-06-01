@@ -91,6 +91,63 @@ def _coerce_transaction(tx: Dict[str, Any]) -> Dict[str, Any]:
     return tx
 
 
+def _is_synthetic_position_transaction(tx: Dict[str, Any]) -> bool:
+    metadata = tx.get("metadata")
+    return isinstance(metadata, dict) and bool(metadata.get("synthetic_from_position"))
+
+
+def _has_external_cash_flow(transactions: List[Dict[str, Any]]) -> bool:
+    cash_flow_types = {"DEPOSIT", "WITHDRAWAL"}
+    for raw_tx in transactions:
+        tx = _coerce_transaction(raw_tx)
+        if tx["transaction_type"] in cash_flow_types and tx.get("metadata", {}).get("source") != "initial_deposit":
+            return True
+    return False
+
+
+def _opening_cash_required_for_imported_ledger(transactions: List[Dict[str, Any]]) -> float:
+    required_cash = 0.0
+    for raw_tx in sorted(transactions, key=_transaction_sort_key):
+        tx = _coerce_transaction(raw_tx)
+        if _is_synthetic_position_transaction(tx):
+            continue
+
+        tx_type = tx["transaction_type"]
+        quantity = safe_float(tx.get("quantity"))
+        price = safe_float(tx.get("price"))
+        fees = safe_float(tx.get("fees"))
+        gross_amount = _transaction_amount(tx)
+
+        if tx_type == "BUY":
+            required_cash += (quantity * price) + fees
+        elif tx_type == "SELL":
+            required_cash -= max((quantity * price) - fees, 0.0)
+        elif tx_type == "WITHDRAWAL":
+            required_cash += gross_amount
+        elif tx_type in {"DEPOSIT", "DIVIDEND"}:
+            required_cash -= gross_amount
+
+    return max(required_cash, 0.0)
+
+
+def resolve_imported_opening_cash(
+    transactions: List[Dict[str, Any]],
+    initial_cash: float = 0.0,
+    is_imported: bool = False,
+) -> float:
+    initial_cash = safe_float(initial_cash)
+    if not is_imported or initial_cash > 0 or not transactions:
+        return initial_cash
+
+    coerced = [_coerce_transaction(tx) for tx in transactions]
+    if any(_is_synthetic_position_transaction(tx) for tx in coerced):
+        return initial_cash
+    if _has_external_cash_flow(coerced):
+        return initial_cash
+
+    return _opening_cash_required_for_imported_ledger(coerced)
+
+
 def _synthesize_transactions(
     user_id: str,
     portfolio_id: str,
@@ -231,10 +288,10 @@ def compute_portfolio_state(
     # FIXED: Calculate cash balance using initial_cash and trace all transactions, skipping initial_deposit to avoid double-counting
     open_lots: Dict[str, List[TaxLot]] = defaultdict(list)
     realized_pnl_by_symbol: Dict[str, float] = defaultdict(float)
-    cash_balance = initial_cash
+    cash_balance = resolve_imported_opening_cash(transactions, initial_cash, is_imported)
 
     is_imported = is_imported or any(
-        isinstance(tx.get("metadata"), dict) and tx["metadata"].get("synthetic_from_position")
+        _is_synthetic_position_transaction(tx)
         for tx in [(_coerce_transaction(t) if not isinstance(t.get("metadata"), dict) else t) for t in transactions]
     )
 
@@ -259,7 +316,7 @@ def compute_portfolio_state(
             cash_balance -= (gross_amount or fees)
         elif tx_type == "BUY" and symbol:
             total_cost = (quantity * price) + fees
-            if not is_imported and not tx.get("metadata", {}).get("synthetic_from_position"):
+            if not _is_synthetic_position_transaction(tx):
                 cash_balance -= total_cost
             cost_per_share = safe_div(total_cost, quantity)
             open_lots[symbol].append(
@@ -270,7 +327,7 @@ def compute_portfolio_state(
                 continue
             
             proceeds = (quantity * price) - fees
-            if not is_imported:
+            if not _is_synthetic_position_transaction(tx):
                 cash_balance += proceeds
             
             remaining = quantity
@@ -464,6 +521,7 @@ def build_equity_curve(
     initial_cash: float = 0.0,
     portfolio_created_at: Optional[date] = None,
     price_map: Optional[Dict[str, PriceSnapshot]] = None,
+    is_imported: bool = False,
 ) -> List[Dict[str, Any]]:
     # FIXED: Build equity curve with baseline if portfolio was created today to guarantee 2-point flat line
     if not transactions:
@@ -496,7 +554,7 @@ def build_equity_curve(
         start_date = start_date - timedelta(days=1)
 
     all_dates = pd.date_range(start=start_date, end=end_date, freq="D")
-    cash_balance = initial_cash
+    cash_balance = resolve_imported_opening_cash(normalized_transactions, initial_cash, is_imported)
     shares_by_symbol: Dict[str, float] = defaultdict(float)
     tx_by_day: Dict[date, List[Dict[str, Any]]] = defaultdict(list)
 
@@ -591,7 +649,8 @@ def build_equity_curve(
             elif tx_type == "SELL" and symbol:
                 proceeds = (quantity * price) - fees
                 shares_by_symbol[symbol] -= quantity
-                cash_balance += proceeds
+                if not _is_synthetic_position_transaction(tx):
+                    cash_balance += proceeds
                 # SELL itself is not a cash flow out of the portfolio system.
             elif tx_type == "SPLIT" and symbol:
                 ratio = safe_float(tx.get("split_ratio") or tx.get("metadata", {}).get("split_ratio"), 1.0)
@@ -909,6 +968,7 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
         initial_cash = safe_float(portfolio.get("initial_cash", 0.0))
         strategy = str(portfolio.get("strategy") or "").lower()
         is_imported_portfolio = (strategy == "imported") or is_upstox_portfolio
+        initial_cash = resolve_imported_opening_cash(transactions, initial_cash, is_imported_portfolio)
         state = compute_portfolio_state(transactions, price_map, initial_cash, is_imported=is_imported_portfolio)
 
         history_end = _utcnow().date()
@@ -1030,7 +1090,8 @@ async def get_portfolio_overview(user_id: str, portfolio_id: Optional[str] = Non
                 history_end, 
                 initial_cash=initial_cash,
                 portfolio_created_at=portfolio_created_at,
-                price_map=price_map
+                price_map=price_map,
+                is_imported=is_imported_portfolio,
             )
         await persist_historical_equity(
             user_id,

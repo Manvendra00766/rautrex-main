@@ -5,6 +5,7 @@ import httpx
 import yfinance as yf
 
 from core.logger import logger
+from services.market_data_policy import allow_yfinance_fallback
 from services.pricing_engine import (
     PriceSnapshot, infer_asset_type, SECTOR_MAP,
     get_active_upstox_token, resolve_upstox_keys, to_upstox_instrument_key
@@ -22,6 +23,9 @@ class UpstoxAdapter(BaseMarketAdapter):
         token = await get_active_upstox_token()
         
         if not token:
+            if not allow_yfinance_fallback():
+                logger.warning(f"[UpstoxAdapter] No active token and yfinance fallback disabled for {symbol_upper}")
+                return None
             logger.info(f"[UpstoxAdapter] No active token. Falling back to yfinance for {symbol}")
             return await self._fetch_fallback_yfinance(symbol_upper)
 
@@ -79,13 +83,19 @@ class UpstoxAdapter(BaseMarketAdapter):
                         raw=quote_data,
                     )
             logger.warning(f"[UpstoxAdapter] API failed (status {response.status_code}): {response.text}")
+            if not allow_yfinance_fallback():
+                return None
             return await self._fetch_fallback_yfinance(symbol_upper)
         except Exception as e:
             logger.error(f"[UpstoxAdapter] Error fetching Upstox price for {symbol_upper}: {e}")
+            if not allow_yfinance_fallback():
+                return None
             return await self._fetch_fallback_yfinance(symbol_upper)
 
     async def _fetch_fallback_yfinance(self, symbol: str) -> Optional[PriceSnapshot]:
         """Fetch Indian asset details using yfinance (e.g. RELIANCE.NS)."""
+        if not allow_yfinance_fallback():
+            return None
         loop = asyncio.get_event_loop()
         def fetch():
             try:
@@ -180,6 +190,8 @@ class UpstoxAdapter(BaseMarketAdapter):
                 logger.warning(f"[UpstoxAdapter] History failed, falling back to yfinance: {e}")
                 
         # yfinance fallback
+        if not allow_yfinance_fallback():
+            return []
         loop = asyncio.get_event_loop()
         def fetch():
             try:

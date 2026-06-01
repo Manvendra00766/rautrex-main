@@ -57,6 +57,31 @@ create table if not exists public.transactions (
   deleted_at timestamptz
 );
 
+alter table if exists public.transactions
+  add column if not exists user_id uuid references auth.users(id) on delete cascade,
+  add column if not exists portfolio_id uuid references public.portfolios(id) on delete cascade,
+  add column if not exists symbol text,
+  add column if not exists asset_type text not null default 'equity',
+  add column if not exists transaction_type text,
+  add column if not exists executed_at timestamptz not null default timezone('utc', now()),
+  add column if not exists settle_date date,
+  add column if not exists quantity numeric(20, 8),
+  add column if not exists price numeric(20, 8),
+  add column if not exists gross_amount numeric(20, 8),
+  add column if not exists fees numeric(20, 8) not null default 0,
+  add column if not exists split_ratio numeric(20, 8),
+  add column if not exists lot_method text not null default 'FIFO',
+  add column if not exists external_id text,
+  add column if not exists metadata jsonb not null default '{}'::jsonb,
+  add column if not exists notes text,
+  add column if not exists created_at timestamptz not null default timezone('utc', now()),
+  add column if not exists updated_at timestamptz not null default timezone('utc', now()),
+  add column if not exists deleted_at timestamptz;
+
+update public.transactions
+set lot_method = 'FIFO'
+where lot_method is null;
+
 do $$
 begin
   if not exists (

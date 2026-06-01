@@ -15,21 +15,61 @@ create index if not exists idx_saved_strategies_user_id on public.saved_strategi
 alter table public.saved_strategies enable row level security;
 
 -- Policies
-create policy "Users can view their own strategies"
-  on public.saved_strategies for select
-  using (auth.uid() = user_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_strategies'
+      and policyname = 'Users can view their own strategies'
+  ) then
+    create policy "Users can view their own strategies"
+      on public.saved_strategies for select
+      using (auth.uid() = user_id);
+  end if;
+end $$;
 
-create policy "Users can insert their own strategies"
-  on public.saved_strategies for insert
-  with check (auth.uid() = user_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_strategies'
+      and policyname = 'Users can insert their own strategies'
+  ) then
+    create policy "Users can insert their own strategies"
+      on public.saved_strategies for insert
+      with check (auth.uid() = user_id);
+  end if;
+end $$;
 
-create policy "Users can update their own strategies"
-  on public.saved_strategies for update
-  using (auth.uid() = user_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_strategies'
+      and policyname = 'Users can update their own strategies'
+  ) then
+    create policy "Users can update their own strategies"
+      on public.saved_strategies for update
+      using (auth.uid() = user_id);
+  end if;
+end $$;
 
-create policy "Users can delete their own strategies"
-  on public.saved_strategies for delete
-  using (auth.uid() = user_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'saved_strategies'
+      and policyname = 'Users can delete their own strategies'
+  ) then
+    create policy "Users can delete their own strategies"
+      on public.saved_strategies for delete
+      using (auth.uid() = user_id);
+  end if;
+end $$;
 
 -- Trigger for updated_at
 drop trigger if exists set_saved_strategies_updated_at on public.saved_strategies;

@@ -15,19 +15,49 @@ ALTER TABLE dcf_valuations ENABLE ROW LEVEL SECURITY;
 
 -- Policies
 -- 1. Users can insert their own DCF valuations
-CREATE POLICY "Users can insert their own DCF valuations" 
-ON dcf_valuations FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'dcf_valuations'
+          AND policyname = 'Users can insert their own DCF valuations'
+    ) THEN
+        CREATE POLICY "Users can insert their own DCF valuations"
+        ON dcf_valuations FOR INSERT
+        WITH CHECK (auth.uid() = user_id);
+    END IF;
+END $$;
 
 -- 2. Users can view their own DCF valuations
-CREATE POLICY "Users can view their own DCF valuations" 
-ON dcf_valuations FOR SELECT 
-USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'dcf_valuations'
+          AND policyname = 'Users can view their own DCF valuations'
+    ) THEN
+        CREATE POLICY "Users can view their own DCF valuations"
+        ON dcf_valuations FOR SELECT
+        USING (auth.uid() = user_id);
+    END IF;
+END $$;
 
 -- 3. Users can delete their own DCF valuations
-CREATE POLICY "Users can delete their own DCF valuations" 
-ON dcf_valuations FOR DELETE 
-USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'dcf_valuations'
+          AND policyname = 'Users can delete their own DCF valuations'
+    ) THEN
+        CREATE POLICY "Users can delete their own DCF valuations"
+        ON dcf_valuations FOR DELETE
+        USING (auth.uid() = user_id);
+    END IF;
+END $$;
 
 -- main.py Registration Lines (Summary of changes applied):
 -- 1. Added dcf_router to imports from routers

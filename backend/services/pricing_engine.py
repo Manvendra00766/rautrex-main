@@ -9,6 +9,7 @@ import pandas as pd
 import yfinance as yf
 
 from supabase_client import supabase
+from services.market_data_policy import allow_yfinance_fallback, is_indian_market_symbol
 
 
 UTC = timezone.utc
@@ -202,6 +203,8 @@ async def upsert_cached_price(snapshot: PriceSnapshot) -> None:
 
 
 def _fetch_quote_sync(symbol: str) -> Optional[PriceSnapshot]:
+    if not allow_yfinance_fallback():
+        return None
     ticker = yf.Ticker(symbol)
     try:
         history = ticker.history(period="5d", auto_adjust=False)
@@ -358,7 +361,7 @@ async def resolve_upstox_keys(symbols: List[str]) -> Dict[str, str]:
 
 async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
     symbol_upper = symbol.upper()
-    is_indian = symbol_upper.endswith(".NS") or symbol_upper.endswith(".BO") or "GS" in symbol_upper or "GB" in symbol_upper
+    is_indian = is_indian_market_symbol(symbol_upper)
     
     if is_indian:
         token = await get_active_upstox_token()
@@ -417,7 +420,10 @@ async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
         # Indian assets must never query yfinance for live price pipelines!
         return None
         
-    # Fallback to yfinance (US/Global assets only)
+    if not allow_yfinance_fallback():
+        return None
+
+    # Fallback to yfinance (local/dev only)
     loop = asyncio.get_event_loop()
     try:
         fresh = await loop.run_in_executor(None, _fetch_quote_sync, symbol)
@@ -482,7 +488,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
         return mapping
 
     # Multi-source routing for Indian assets
-    indian_missing = [s for s in missing if s.endswith(".NS") or s.endswith(".BO") or "GS" in s or "GB" in s]
+    indian_missing = [s for s in missing if is_indian_market_symbol(s)]
     if indian_missing:
         token = await get_active_upstox_token()
         if token:
@@ -542,14 +548,11 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                 print(f"Error in batch Upstox Quotes API fetch: {e}")
 
     # Re-evaluate missing symbols for yfinance fallback (Exclude G-Sec / Gold Bonds, but allow NSE/BSE stocks/ETFs)
-    still_missing = [
-        s for s in missing 
-        if s not in mapping and not ("GS" in s or "GB" in s or s.startswith("709GS"))
-    ]
+    still_missing = [s for s in missing if s not in mapping and not is_indian_market_symbol(s)]
     
     # If a G-Sec is still missing from the mapping, make sure it falls back to cache
     for s in missing:
-        if s not in mapping and ("GS" in s or "GB" in s or s.startswith("709GS")):
+        if s not in mapping and is_indian_market_symbol(s):
             if s in all_cached:
                 mapping[s] = all_cached[s]
 
@@ -594,7 +597,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
 
     still_missing = [s for s in still_missing if s not in mapping]
 
-    if not still_missing:
+    if not still_missing or not allow_yfinance_fallback():
         return mapping
 
     # 3. Batch download remaining missing symbols via yfinance
@@ -676,6 +679,8 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
 def _download_history_sync(symbols: List[str], start: str, end: str) -> Dict[str, pd.Series]:
     if not symbols:
         return {}
+    if not allow_yfinance_fallback():
+        return {}
 
     # group_by="ticker" is useful for multiple symbols but requires careful parsing
     raw = yf.download(symbols, start=start, end=end, progress=False, auto_adjust=False, group_by="ticker")
@@ -714,7 +719,7 @@ async def get_price_history(symbols: Iterable[str], start: date, end: date) -> D
     if not unique_symbols:
         return {}
 
-    indian_symbols = [s for s in unique_symbols if s.endswith(".NS") or s.endswith(".BO") or "GS" in s or "GB" in s]
+    indian_symbols = [s for s in unique_symbols if is_indian_market_symbol(s)]
     histories: Dict[str, pd.Series] = {}
     
     # 1. Fetch Indian assets via Upstox Historical Candles API (Source 1)
@@ -755,10 +760,9 @@ async def get_price_history(symbols: Iterable[str], start: date, end: date) -> D
                 print(f"Error fetching Upstox historical candles: {e}")
                 
     # 2. Re-evaluate remaining missing symbols for yfinance fallback (Source 2 - US/Global assets only)
-    still_missing = [
-        s for s in unique_symbols 
-        if s not in histories and not ("GS" in s or "GB" in s or s.startswith("709GS"))
-    ]
+    still_missing = [s for s in unique_symbols if s not in histories and not is_indian_market_symbol(s)]
+    if still_missing and not allow_yfinance_fallback():
+        return histories
     if still_missing:
         try:
             loop = asyncio.get_event_loop()

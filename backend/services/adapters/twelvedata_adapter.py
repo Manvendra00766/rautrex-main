@@ -6,6 +6,7 @@ import yfinance as yf
 from core.config import settings
 from core.logger import logger
 from services.pricing_engine import PriceSnapshot, infer_asset_type, SECTOR_MAP
+from services.market_data_policy import allow_yfinance_fallback
 from .base_adapter import BaseMarketAdapter
 from infrastructure.time_sync import offset_calibrated_datetime
 
@@ -22,6 +23,9 @@ class TwelveDataAdapter(BaseMarketAdapter):
     async def fetch_price(self, symbol: str) -> Optional[PriceSnapshot]:
         symbol = symbol.strip().upper()
         if not self._is_configured():
+            if not allow_yfinance_fallback():
+                logger.warning(f"[TwelveDataAdapter] Keys missing and yfinance fallback disabled for {symbol}")
+                return None
             logger.info(f"[TwelveDataAdapter] Keys missing. Falling back to yfinance for {symbol}")
             return await self._fetch_fallback_yfinance(symbol)
 
@@ -43,6 +47,8 @@ class TwelveDataAdapter(BaseMarketAdapter):
                 data = response.json()
                 if "code" in data and data["code"] >= 400:
                     logger.warning(f"[TwelveDataAdapter] API error: {data}")
+                    if not allow_yfinance_fallback():
+                        return None
                     return await self._fetch_fallback_yfinance(symbol)
                 
                 last_price = float(data.get("close") or data.get("previous_close") or 0)
@@ -70,12 +76,18 @@ class TwelveDataAdapter(BaseMarketAdapter):
                     raw=data
                 )
             else:
+                if not allow_yfinance_fallback():
+                    return None
                 return await self._fetch_fallback_yfinance(symbol)
         except Exception as e:
             logger.error(f"[TwelveDataAdapter] Error fetching {symbol}: {e}")
+            if not allow_yfinance_fallback():
+                return None
             return await self._fetch_fallback_yfinance(symbol)
 
     async def _fetch_fallback_yfinance(self, symbol: str) -> Optional[PriceSnapshot]:
+        if not allow_yfinance_fallback():
+            return None
         loop = asyncio.get_event_loop()
         def fetch():
             try:
@@ -121,6 +133,8 @@ class TwelveDataAdapter(BaseMarketAdapter):
 
     async def fetch_history(self, symbol: str, period: str = "1mo") -> List[Dict[str, Any]]:
         # Using Yfinance as high-fidelity fallback for historical bars because TwelveData free tier is limited
+        if not allow_yfinance_fallback():
+            return []
         loop = asyncio.get_event_loop()
         def fetch():
             try:

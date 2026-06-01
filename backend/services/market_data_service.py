@@ -11,6 +11,7 @@ from infrastructure.rate_limiter import TokenBucketRateLimiter
 from services.adapters.alpaca_adapter import AlpacaAdapter
 from services.adapters.upstox_adapter import UpstoxAdapter
 from services.adapters.twelvedata_adapter import TwelveDataAdapter
+from services.market_data_policy import allow_yfinance_fallback
 
 class CircuitState(Enum):
     CLOSED = "CLOSED"
@@ -189,6 +190,8 @@ class MarketDataService:
             {"ticker": "^FCHI", "name": "CAC 40", "value": 8000.0, "change_percent": 0.0},
             {"ticker": "^N225", "name": "Nikkei 225", "value": 38000.0, "change_percent": 0.0}
         ]
+        if not allow_yfinance_fallback():
+            return default_indices
         try:
             loop = asyncio.get_event_loop()
             def fetch():
@@ -250,6 +253,8 @@ class MarketDataService:
                 {"ticker": "MSFT", "price": 415.0, "change_percent": -0.8}
             ]
         }
+        if not allow_yfinance_fallback():
+            return default_movers
         try:
             loop = asyncio.get_event_loop()
             def fetch():

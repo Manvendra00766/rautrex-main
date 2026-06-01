@@ -6,6 +6,7 @@ import yfinance as yf
 from core.config import settings
 from core.logger import logger
 from services.pricing_engine import PriceSnapshot, infer_asset_type, SECTOR_MAP
+from services.market_data_policy import allow_yfinance_fallback
 from .base_adapter import BaseMarketAdapter
 from infrastructure.time_sync import offset_calibrated_datetime, offset_calibrated_now
 
@@ -25,6 +26,9 @@ class AlpacaAdapter(BaseMarketAdapter):
     async def fetch_price(self, symbol: str) -> Optional[PriceSnapshot]:
         symbol = symbol.strip().upper()
         if not self._is_configured():
+            if not allow_yfinance_fallback():
+                logger.warning(f"[AlpacaAdapter] Keys missing and yfinance fallback disabled for {symbol}")
+                return None
             logger.info(f"[AlpacaAdapter] Keys missing. Falling back to yfinance for {symbol}")
             return await self._fetch_fallback_yfinance(symbol)
 
@@ -84,13 +88,19 @@ class AlpacaAdapter(BaseMarketAdapter):
                 )
             else:
                 logger.warning(f"[AlpacaAdapter] API error {response.status_code}: {response.text}")
+                if not allow_yfinance_fallback():
+                    return None
                 return await self._fetch_fallback_yfinance(symbol)
         except Exception as e:
             logger.error(f"[AlpacaAdapter] Error fetching {symbol}: {e}")
+            if not allow_yfinance_fallback():
+                return None
             return await self._fetch_fallback_yfinance(symbol)
 
     async def _fetch_fallback_yfinance(self, symbol: str) -> Optional[PriceSnapshot]:
         """High-fidelity fallback using yfinance to fetch US equities."""
+        if not allow_yfinance_fallback():
+            return None
         loop = asyncio.get_event_loop()
         def fetch():
             try:
@@ -146,6 +156,8 @@ class AlpacaAdapter(BaseMarketAdapter):
 
     async def fetch_history(self, symbol: str, period: str = "1mo") -> List[Dict[str, Any]]:
         # For history, use the same high-fidelity fallback because Alpaca free tier historical bars are highly limited or delayed
+        if not allow_yfinance_fallback():
+            return []
         loop = asyncio.get_event_loop()
         def fetch():
             try:
