@@ -6,6 +6,11 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from utils import safe_json
 
+
+def _is_gsec_symbol(symbol: str) -> bool:
+    normalized = symbol.strip().upper()
+    return "GS" in normalized or "GB" in normalized or normalized.startswith("709GS")
+
 # --- CORE MATH UTILS ---
 
 def calculate_position_metrics(position, current_price):
@@ -63,23 +68,24 @@ async def _get_returns_async(tickers: List[str], years: int = 2) -> pd.DataFrame
             
         prices = pd.DataFrame(histories) if histories else pd.DataFrame()
         
-        # Inject synthetic fallback for any ticker that completely failed to download
+        # Inject deterministic low-volatility fallback for non-equity instruments or
+        # unresolved symbols so one unsupported holding does not break optimization.
         missing = [t for t in tickers if t not in prices.columns or prices[t].isna().all()]
         if missing:
             num_rows = len(prices) if not prices.empty else (252 * years)
+            synthetic_index = prices.index if not prices.empty else pd.date_range(end=end_d, periods=num_rows, freq='B')
             for mt in missing:
-                # Simulating stable asset
-                drift = 0.00015
-                vol = 0.001
-                synthetic_returns = np.random.normal(drift, vol, num_rows)
+                daily_drift = 0.065 / 252 if _is_gsec_symbol(mt) else 0.00015
+                daily_wave = 0.00005 if _is_gsec_symbol(mt) else 0.001
+                synthetic_returns = daily_drift + daily_wave * np.sin(np.arange(num_rows) / 17.0)
                 start_price = 100.0
                 synth_prices = [start_price]
                 for r in synthetic_returns[:-1]:
                     synth_prices.append(synth_prices[-1] * (1 + r))
-                prices[mt] = synth_prices
+                prices[mt] = pd.Series(synth_prices, index=synthetic_index)
                 
             if prices.index.empty:
-                prices.index = pd.date_range(end=end_d, periods=num_rows, freq='B')
+                prices.index = synthetic_index
 
         prices = prices.dropna(axis=1, how='all')
         if prices.empty:

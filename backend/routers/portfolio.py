@@ -15,6 +15,7 @@ from auth import get_current_user
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db
 from services.ticker_resolver import ticker_resolver_service
+from core.logger import logger
 
 router = APIRouter()
 

@@ -146,6 +146,11 @@ def normalize_symbol(symbol: str) -> str:
     return s
 
 
+def is_gsec_symbol(symbol: str) -> bool:
+    normalized = symbol.strip().upper()
+    return "GS" in normalized or "GB" in normalized or normalized.startswith("709GS")
+
+
 def infer_asset_type(symbol: str, info: Optional[Dict[str, Any]] = None) -> str:
     info = info or {}
     quote_type = str(info.get("quoteType") or info.get("quote_type") or "").lower()
@@ -364,7 +369,7 @@ async def resolve_upstox_keys(symbols: List[str]) -> Dict[str, str]:
 async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
     symbol_upper = symbol.upper()
     is_indian = is_indian_market_symbol(symbol_upper)
-    is_gsec = "GS" in symbol_upper or "GB" in symbol_upper or symbol_upper.startswith("709GS")
+    is_gsec = is_gsec_symbol(symbol_upper)
     
     # 1. SPECIAL CASE: Indian Government Bonds (G-Secs)
     # These should ALWAYS try the official FBIL source via bond_service
@@ -482,6 +487,9 @@ async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
         except Exception as gf_err:
             print(f"Google Finance fallback failed for {symbol_upper}: {gf_err}")
 
+    if is_gsec:
+        return None
+
     # 3. GLOBAL FALLBACK: yfinance (US Stocks, Crypto, and Indian last resort)
     try:
         loop = asyncio.get_event_loop()
@@ -499,13 +507,20 @@ async def get_price_snapshot(symbol: str, max_age_seconds: int = DEFAULT_CACHE_T
     symbol = normalize_symbol(symbol)
     cached = await get_cached_price(symbol)
     if cached:
-        is_upstox = cached.source in ["upstox_quote", "upstox_sync", "upstox_quotes_api", "upstox_quotes_api_batch"] or "GS" in cached.symbol or "GB" in cached.symbol
+        is_upstox = cached.source in ["upstox_quote", "upstox_sync", "upstox_quotes_api", "upstox_quotes_api_batch"] or is_gsec_symbol(cached.symbol)
         if is_upstox or (_utcnow() - cached.fetched_at).total_seconds() <= max_age_seconds:
             return cached
 
-    # If it is a government security/bond and we couldn't get a fresh quote from cache/Upstox, do NOT query yfinance!
-    is_gsec = "GS" in symbol or "GB" in symbol or symbol.startswith("709GS")
-    if is_gsec:
+    # Government securities are not reliable Yahoo symbols. Try FBIL/Upstox/Google,
+    # then stale cache, but never the generic yfinance path.
+    if is_gsec_symbol(symbol):
+        try:
+            fresh = await _fetch_quote_multi_source(symbol)
+            if fresh:
+                await upsert_cached_price(fresh)
+                return fresh
+        except Exception:
+            pass
         return cached
 
     try:
@@ -535,7 +550,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
             snap = _parse_cached_snapshot(row)
             if snap:
                 all_cached[snap.symbol] = snap
-                is_upstox = snap.source in ["upstox_quote", "upstox_sync", "upstox_quotes_api", "upstox_quotes_api_batch"] or "GS" in snap.symbol or "GB" in snap.symbol
+                is_upstox = snap.source in ["upstox_quote", "upstox_sync", "upstox_quotes_api", "upstox_quotes_api_batch"] or is_gsec_symbol(snap.symbol)
                 if is_upstox or (now - snap.fetched_at).total_seconds() <= max_age_seconds:
                     mapping[snap.symbol] = snap
     except Exception as e:
@@ -548,9 +563,21 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
 
     # Multi-source routing for Indian assets
     indian_missing = [s for s in missing if is_indian_market_symbol(s)]
+    gsec_missing = [s for s in indian_missing if is_gsec_symbol(s)]
+    for symbol in gsec_missing:
+        if symbol in mapping:
+            continue
+        try:
+            fresh = await _fetch_quote_multi_source(symbol)
+            if fresh:
+                mapping[symbol] = fresh
+                asyncio.create_task(upsert_cached_price(fresh))
+        except Exception as e:
+            print(f"Error fetching G-Sec quote for {symbol}: {e}")
     if indian_missing:
         token = await get_active_upstox_token()
-        if token:
+        indian_missing = [s for s in indian_missing if s not in mapping]
+        if token and indian_missing:
             try:
                 import httpx
                 resolved_keys = await resolve_upstox_keys(indian_missing)
@@ -589,7 +616,7 @@ async def get_batch_price_snapshots(symbols: Iterable[str], max_age_seconds: int
                                 asset_type="equity",
                                 currency="INR",
                                 exchange=inst_key.split("|")[0] if "|" in inst_key else (inst_key.split(":")[0] if ":" in inst_key else "NSE"),
-                                sector="Government Securities" if ("GS" in symbol.upper() or "GB" in symbol.upper() or "GS" in inst_key or "GB" in inst_key) else SECTOR_MAP.get(symbol.upper(), "Indian Equity"),
+                                sector="Government Securities" if (is_gsec_symbol(symbol) or "GS" in inst_key or "GB" in inst_key) else SECTOR_MAP.get(symbol.upper(), "Indian Equity"),
                                 country="IN",
                                 market_cap=None,
                                 previous_close=close_price,
@@ -790,6 +817,8 @@ async def get_price_history(symbols: Iterable[str], start: date, end: date) -> D
                 resolved_keys = await resolve_upstox_keys(indian_symbols)
                 async with httpx.AsyncClient() as client:
                     for symbol in indian_symbols:
+                        if is_gsec_symbol(symbol):
+                            continue
                         instrument_key = resolved_keys.get(symbol) or to_upstox_instrument_key(symbol)
                         from_str = start.isoformat()
                         to_str = end.isoformat()
