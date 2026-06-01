@@ -34,7 +34,7 @@ export default function ChartWrapper({ children, height = 300 }: { children: Rea
   }
   
   return (
-    <div ref={containerRef} style={{ width: '100%', height, minHeight: height, minWidth: 0 }}>
+    <div ref={containerRef} style={{ width: '100%', height, minHeight: 1, minWidth: 1 }}>
       {children}
     </div>
   );

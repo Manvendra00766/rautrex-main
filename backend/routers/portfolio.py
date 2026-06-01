@@ -202,7 +202,12 @@ async def corr_matrix(
         res = await get_correlation_matrix(ticker_list)
         return JSONResponse(content=safe_json({"correlation_matrix": res}))
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        logger.warning(f"Correlation matrix failed: {ve}")
+        return JSONResponse(content=safe_json({
+            "correlation_matrix": [],
+            "error": str(ve),
+            "warning": "Could not calculate correlation matrix due to insufficient historical data."
+        }))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

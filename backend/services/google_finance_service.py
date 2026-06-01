@@ -19,9 +19,21 @@ class GoogleFinanceService:
         Scrapes price data from Google Finance using highly targeted 2025 DOM selectors.
         Supports Indian stocks (e.g., RELIANCE:NSE).
         """
+        # 0. Mapping for special tickers (e.g. DVRs)
+        TICKER_MAP = {
+            "TMPV.NS": "TATAMTRDVR:NSE",
+            "TATAMTRDVR.NS": "TATAMTRDVR:NSE",
+            "RELIANCE.NS": "RELIANCE:NSE",
+            "TCS.NS": "TCS:NSE",
+            "HDFCBANK.NS": "HDFCBANK:NSE",
+        }
+        
         # Convert .NS / .BO to :NSE / :BSE
         clean_symbol = symbol.strip().upper()
-        if clean_symbol.endswith(".NS"):
+        
+        if clean_symbol in TICKER_MAP:
+            ticker = TICKER_MAP[clean_symbol]
+        elif clean_symbol.endswith(".NS"):
             ticker = clean_symbol[:-3] + ":NSE"
         elif clean_symbol.endswith(".BO"):
             ticker = clean_symbol[:-3] + ":BSE"
