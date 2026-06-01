@@ -958,6 +958,7 @@ export default function RedesignedDashboard() {
                       />
                     </AreaChart>
                   </ResponsiveContainer>
+                  </ChartWrapper>
                 ) : (
                   <div className="flex items-center justify-center h-full text-[#8C8278] text-xs font-medium">
                     Building your performance history — check back tomorrow
