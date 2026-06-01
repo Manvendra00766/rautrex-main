@@ -10,6 +10,8 @@ import yfinance as yf
 
 from supabase_client import supabase
 from services.market_data_policy import allow_yfinance_fallback, is_indian_market_symbol
+from services.google_finance_service import google_finance_service
+from services.bond_service import bond_service
 
 
 UTC = timezone.utc
@@ -362,8 +364,45 @@ async def resolve_upstox_keys(symbols: List[str]) -> Dict[str, str]:
 async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
     symbol_upper = symbol.upper()
     is_indian = is_indian_market_symbol(symbol_upper)
+    is_gsec = "GS" in symbol_upper or "GB" in symbol_upper or symbol_upper.startswith("709GS")
     
+    # 1. SPECIAL CASE: Indian Government Bonds (G-Secs)
+    # These should ALWAYS try the official FBIL source via bond_service
+    if is_indian and is_gsec:
+        try:
+            bond_data = await bond_service.fetch_gsec_yields()
+            yields = bond_data.get("yields", {})
+            # Map appropriate tenor. If not specific, default to 10Y benchmark
+            # Typical symbol might be 718GS2033.NS or just GS10YR
+            bond_yield = yields.get("10Y", 7.0)
+            if "5Y" in symbol_upper: bond_yield = yields.get("5Y", bond_yield)
+            elif "2Y" in symbol_upper: bond_yield = yields.get("2Y", bond_yield)
+            elif "91D" in symbol_upper: bond_yield = yields.get("91D", bond_yield)
+            
+            return PriceSnapshot(
+                symbol=symbol_upper,
+                name=f"Govt of India Bond ({symbol_upper})",
+                asset_type="bond",
+                currency="INR",
+                exchange="NSE_GS",
+                sector="Government Securities",
+                country="IN",
+                market_cap=None,
+                previous_close=bond_yield,
+                last_price=bond_yield,
+                change_amount=0.0,
+                change_percent=0.0,
+                volume=None,
+                source="FBIL",
+                fetched_at=_utcnow(),
+                raw=bond_data
+            )
+        except Exception as bond_err:
+            print(f"FBIL bond fetch failed for {symbol_upper}: {bond_err}")
+
+    # 2. Standard Indian Equities / ETFs
     if is_indian:
+        # A. Try Upstox (First Party Broker Truth)
         token = await get_active_upstox_token()
         if token:
             try:
@@ -398,39 +437,59 @@ async def _fetch_quote_multi_source(symbol: str) -> Optional[PriceSnapshot]:
                         change_percent = (change_amount / close_price * 100.0) if close_price > 0 else 0.0
                         
                         return PriceSnapshot(
-                            symbol=symbol,
-                            name=quote_data.get("symbol") or symbol,
+                            symbol=symbol_upper,
+                            name=quote_data.get("symbol") or symbol_upper,
                             asset_type="equity",
                             currency="INR",
-                            exchange=instrument_key.split("|")[0] if "|" in instrument_key else (instrument_key.split(":")[0] if ":" in instrument_key else "NSE"),
-                            sector="Government Securities" if ("GS" in symbol_upper or "GB" in symbol_upper or "GS" in instrument_key or "GB" in instrument_key) else SECTOR_MAP.get(symbol_upper, "Indian Equity"),
+                            exchange=quote_data.get("exchange") or "NSE",
+                            sector=SECTOR_MAP.get(symbol_upper, "Other"),
                             country="IN",
                             market_cap=None,
                             previous_close=close_price,
                             last_price=last_price,
                             change_amount=change_amount,
                             change_percent=change_percent,
-                            volume=int(quote_data.get("volume") or 0) if quote_data.get("volume") else None,
-                            source="upstox_quotes_api",
+                            volume=int(quote_data.get("volume") or 0),
+                            source="Upstox",
                             fetched_at=_utcnow(),
-                            raw=quote_data
+                            raw=quote_data,
                         )
-            except Exception as e:
-                print(f"Error fetching from Upstox API for {symbol}: {e}")
-        # Indian assets must never query yfinance for live price pipelines!
-        return None
-        
-    if not allow_yfinance_fallback():
-        return None
+            except Exception as upstox_err:
+                print(f"Upstox fetch failed for {symbol_upper}: {upstox_err}")
 
-    # Fallback to yfinance (local/dev only)
-    loop = asyncio.get_event_loop()
+        # B. Fallback to Google Finance (Free & Reliable for Indian Assets)
+        try:
+            gf_snap = await google_finance_service.fetch_price(symbol_upper)
+            if gf_snap:
+                return PriceSnapshot(
+                    symbol=symbol_upper,
+                    name=gf_snap["name"],
+                    asset_type="equity",
+                    currency="INR",
+                    exchange="NSE",
+                    sector=SECTOR_MAP.get(symbol_upper, "Other"),
+                    country="IN",
+                    market_cap=None,
+                    previous_close=gf_snap["previous_close"],
+                    last_price=gf_snap["price"],
+                    change_amount=gf_snap["change_amount"],
+                    change_percent=gf_snap["change_percent"],
+                    volume=None,
+                    source="Google Finance",
+                    fetched_at=_utcnow(),
+                    raw=gf_snap
+                )
+        except Exception as gf_err:
+            print(f"Google Finance fallback failed for {symbol_upper}: {gf_err}")
+
+    # 3. GLOBAL FALLBACK: yfinance (US Stocks, Crypto, and Indian last resort)
     try:
-        fresh = await loop.run_in_executor(None, _fetch_quote_sync, symbol)
-        if fresh:
-            return fresh
-    except Exception:
-        pass
+        loop = asyncio.get_event_loop()
+        snap = await loop.run_in_executor(None, _fetch_quote_sync, symbol_upper)
+        if snap:
+            return snap
+    except Exception as yf_err:
+        print(f"Global yfinance fallback failed for {symbol_upper}: {yf_err}")
         
     return None
 
