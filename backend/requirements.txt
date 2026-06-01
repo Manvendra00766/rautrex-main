@@ -21,6 +21,8 @@ httpx
 sse-starlette
 websockets
 sqlalchemy
+aiosqlite
+alembic
 asyncpg
 apscheduler
 greenlet
@@ -28,7 +30,6 @@ python-jose[cryptography]
 supabase
 redis
 loguru
-pydantic-settings
 tenacity
 respx
 matplotlib
