@@ -9,8 +9,10 @@ from infrastructure.cache import cache_response
 from infrastructure.rate_limiter import TokenBucketRateLimiter
 
 from services.adapters.alpaca_adapter import AlpacaAdapter
+from services.adapters.angelone_adapter import AngelOneAdapter
 from services.adapters.upstox_adapter import UpstoxAdapter
 from services.adapters.twelvedata_adapter import TwelveDataAdapter
+from services.nse_handler import nse_handler
 from services.market_data_policy import allow_yfinance_fallback
 
 class CircuitState(Enum):
@@ -40,17 +42,17 @@ class CircuitBreaker:
     def can_execute(self) -> bool:
         if self.state == CircuitState.CLOSED:
             return True
-        
+
         if self.state == CircuitState.OPEN:
             if time.time() - self.last_failure_time > self.recovery_timeout:
                 self.state = CircuitState.HALF_OPEN
                 logger.info("Circuit Breaker transitioned to HALF_OPEN. Attempting recovery.")
                 return True
             return False
-        
+
         if self.state == CircuitState.HALF_OPEN:
             return True
-        
+
         return False
 
 class MarketDataService:
@@ -65,17 +67,19 @@ class MarketDataService:
         from concurrent.futures import ThreadPoolExecutor
         self.fallback_executor = ThreadPoolExecutor(max_workers=20, thread_name_prefix="market_fallback")
 
-        # Concrete adapters with isolated resource thread limits
+        # Concrete adapters
         self.alpaca_adapter = AlpacaAdapter(executor=self.fallback_executor)
+        self.angelone_adapter = AngelOneAdapter(executor=self.fallback_executor)
         self.upstox_adapter = UpstoxAdapter(executor=self.fallback_executor)
         self.twelvedata_adapter = TwelveDataAdapter(executor=self.fallback_executor)
-        
+
         self.circuit_breaker = CircuitBreaker()
         self.rate_limiter = TokenBucketRateLimiter(rate=5.0, capacity=5.0)
 
     async def close(self):
         await self.client.aclose()
         await self.alpaca_adapter.client.aclose()
+        await self.angelone_adapter.client.aclose()
         await self.upstox_adapter.client.aclose()
         await self.twelvedata_adapter.client.aclose()
         # Shutdown the thread pool executor cleanly
@@ -83,65 +87,114 @@ class MarketDataService:
 
     def _get_adapter(self, symbol: str):
         symbol_upper = symbol.strip().upper()
-        
+
         # Rule A: Indian Stocks (.NS, .BO, or specific identifiers)
         if symbol_upper.endswith(".NS") or symbol_upper.endswith(".BO") or "GS" in symbol_upper or "GB" in symbol_upper:
             return self.upstox_adapter
-            
-        # Rule B: Commodities (matching GC=F, CL=F, SI=F, NG=F, BZ=F or CFDs)
+
+        # Rule B: Commodities
         commodities = {"GC=F", "CL=F", "SI=F", "NG=F", "BZ=F", "XAU_USD", "XAG_USD", "WTICO_USD", "BCO_USD", "GOLD"}
         if symbol_upper in commodities:
             return self.twelvedata_adapter
-            
+
         # Rule C: Default US equities
         return self.alpaca_adapter
 
     async def fetch_price(self, symbol: str) -> Dict[str, Any]:
-        """High-level fetch with circuit breaker, rate limiter, intelligent routing, and fallback adapters."""
-        if not self.circuit_breaker.can_execute():
-            logger.warning(f"Circuit Breaker is OPEN. Skipping fetch for {symbol}.")
+        """Layered fetch: Redis -> Angel One -> NSE -> yfinance -> Stale Cache."""
+        symbol_upper = symbol.strip().upper()
+
+        is_indian = symbol_upper.endswith(".NS") or symbol_upper.endswith(".BO") or "GS" in symbol_upper or "GB" in symbol_upper
+
+        if not is_indian:
+            adapter = self._get_adapter(symbol)
+            try:
+                snapshot = await self.rate_limiter.execute(lambda: adapter.fetch_price(symbol))
+                if snapshot:
+                    return self._map_snapshot(snapshot)
+            except Exception:
+                pass
             return await self._get_stale_data_fallback(symbol)
 
-        adapter = self._get_adapter(symbol)
+        # --- Layered Fetch for Indian Assets ---
+
+        # 1. Try Angel One
         try:
-            async def perform_fetch():
-                return await adapter.fetch_price(symbol)
-            snapshot = await self.rate_limiter.execute(perform_fetch)
-            if snapshot:
-                # FIXED: Check if the price was fetched via fallback to properly trip the circuit breaker
-                if getattr(snapshot, "is_fallback", False):
-                    logger.warning(f"Market data fetched via fallback for {symbol}. Recording failure on circuit breaker.")
-                    self.circuit_breaker.record_failure()
-                else:
-                    self.circuit_breaker.record_success()
-                return {
-                    "ticker": snapshot.symbol,
-                    "price": snapshot.last_price,
-                    "regularMarketPrice": snapshot.last_price,
-                    "previous_close": snapshot.previous_close,
-                    "change_amount": snapshot.change_amount,
-                    "change_percent": snapshot.change_percent,
-                    "volume": snapshot.volume,
-                    "name": snapshot.name,
-                    "currency": snapshot.currency,
-                    "source": snapshot.source,
-                    "timestamp": snapshot.fetched_at.timestamp()
-                }
-            else:
-                raise MarketDataError(f"Adapter {adapter.__class__.__name__} failed to fetch symbol {symbol}")
+            snap = await self.angelone_adapter.fetch_price(symbol_upper)
+            if snap:
+                return self._map_snapshot(snap)
         except Exception as e:
-            logger.warning(f"Adapter failed for {symbol}: {e}. Tripping circuit breaker action.")
-            self.circuit_breaker.record_failure()
-            return await self._get_stale_data_fallback(symbol)
+            logger.warning(f"Angel One fetch failed for {symbol_upper}: {e}")
+
+        # 2. Try NSE Unofficial
+        try:
+            nse_data = nse_handler.fetch_quote(symbol_upper)
+            if nse_data:
+                return {
+                    "ticker": symbol_upper,
+                    "price": nse_data["price"],
+                    "regularMarketPrice": nse_data["price"],
+                    "previous_close": nse_data["previous_close"],
+                    "change_amount": nse_data["change"],
+                    "change_percent": nse_data["change_percent"],
+                    "volume": nse_data["volume"],
+                    "source": "NSE_Unofficial",
+                    "timestamp": nse_data["timestamp"]
+                }
+        except Exception as e:
+            logger.warning(f"NSE fetch failed for {symbol_upper}: {e}")
+
+        # 3. Try yfinance (via UpstoxAdapter's fallback mechanism)
+        try:
+            snap = await self.upstox_adapter._fetch_fallback_yfinance(symbol_upper)
+            if snap:
+                return self._map_snapshot(snap)
+        except Exception as e:
+            logger.warning(f"yfinance fallback failed for {symbol_upper}: {e}")
+
+        # 4. Final Fallback: Stale Cache / Graceful object
+        return await self._get_stale_data_fallback(symbol)
+
+    def _map_snapshot(self, snapshot) -> Dict[str, Any]:
+        """Helper to convert PriceSnapshot to the standard response dict."""
+        return {
+            "ticker": snapshot.symbol,
+            "price": snapshot.last_price,
+            "regularMarketPrice": snapshot.last_price,
+            "previous_close": snapshot.previous_close,
+            "change_amount": snapshot.change_amount,
+            "change_percent": snapshot.change_percent,
+            "volume": snapshot.volume,
+            "name": snapshot.name,
+            "currency": snapshot.currency,
+            "source": snapshot.source,
+            "timestamp": snapshot.fetched_at.timestamp()
+        }
 
     async def _get_stale_data_fallback(self, symbol: str) -> Dict:
-        """Final fallback: returns structured empty data to prevent frontend crash."""
-        logger.info(f"Returning graceful fallback data for {symbol}")
+        """Final fallback: returns the last known cached price with a 'stale' flag."""
+        symbol_upper = symbol.strip().upper()
+        cache_key = f"market:stock:fetch_price:{symbol_upper}"
+
+        cached_val = await redis_client.get(cache_key)
+        if cached_val:
+            try:
+                import json
+                data = json.loads(cached_val)
+                data["stale"] = True
+                data["status"] = "stale"
+                return data
+            except Exception:
+                pass
+
+        logger.info(f"No cache available for {symbol_upper}, returning generic fallback.")
         return {
-            "ticker": symbol,
+            "ticker": symbol_upper,
             "price": 0.0,
+            "regularMarketPrice": 0.0,
             "status": "stale",
-            "error": "Market data providers unavailable",
+            "stale": True,
+            "error": "Market data providers unavailable and no cached data found",
             "timestamp": time.time()
         }
 
@@ -153,9 +206,9 @@ class MarketDataService:
         """Fetch prices for multiple symbols concurrently with a semaphore limit to prevent provider rate limiting."""
         if not symbols:
             return {}
-            
+
         sem = asyncio.Semaphore(10)
-        
+
         async def fetch_with_semaphore(symbol: str) -> Dict[str, Any]:
             async with sem:
                 try:
@@ -163,10 +216,10 @@ class MarketDataService:
                 except Exception as e:
                     logger.error(f"Error fetching batch price for {symbol}: {e}")
                     return await self._get_stale_data_fallback(symbol)
-                    
+
         tasks = {symbol: fetch_with_semaphore(symbol) for symbol in symbols}
         results = await asyncio.gather(*tasks.values(), return_exceptions=True)
-        
+
         batch_results = {}
         for symbol, result in zip(tasks.keys(), results):
             if isinstance(result, Exception):
@@ -174,7 +227,7 @@ class MarketDataService:
                 batch_results[symbol] = await self._get_stale_data_fallback(symbol)
             else:
                 batch_results[symbol] = result
-                
+
         return batch_results
 
     @cache_response(ttl=120, prefix="market:indices")
@@ -260,25 +313,25 @@ class MarketDataService:
             def fetch():
                 import yfinance as yf
                 pool = ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "AMZN", "GOOGL", "META", "NFLX", "AVGO", "SMCI", "ARM", "INTC", "COIN", "BABA"]
-                
+
                 try:
                     df = yf.download(pool, period="5d", progress=False)
                     if df is None or df.empty:
                         return None
-                    
+
                     stocks = []
                     for s in pool:
                         try:
                             if 'Close' in df and s in df['Close']:
                                 close_series = df['Close'][s].dropna()
                                 volume_series = df['Volume'][s].dropna() if 'Volume' in df and s in df['Volume'] else []
-                                
+
                                 if len(close_series) >= 2:
                                     current_price = float(close_series.iloc[-1])
                                     prev_price = float(close_series.iloc[-2])
                                     change_pct = float(((current_price - prev_price) / prev_price) * 100)
                                     volume = int(volume_series.iloc[-1]) if len(volume_series) > 0 else 0
-                                    
+
                                     stocks.append({
                                         "ticker": s,
                                         "price": current_price,
@@ -287,14 +340,14 @@ class MarketDataService:
                                     })
                         except Exception as inner_ex:
                             logger.warning(f"Failed parsing downloaded batch data for {s}: {inner_ex}")
-                    
+
                     if not stocks:
                         return None
-                        
+
                     gainers = sorted([s for s in stocks if s["change_percent"] > 0], key=lambda x: x["change_percent"], reverse=True)
                     losers = sorted([s for s in stocks if s["change_percent"] < 0], key=lambda x: x["change_percent"])
                     active = sorted(stocks, key=lambda x: x["volume"], reverse=True)
-                    
+
                     return {
                         "gainers": gainers[:6],
                         "losers": losers[:6],
@@ -303,7 +356,6 @@ class MarketDataService:
                 except Exception as batch_ex:
                     logger.warning(f"Failed batch yfinance download for movers: {batch_ex}")
                     return None
-
             res = await asyncio.wait_for(loop.run_in_executor(None, fetch), timeout=12.0)
             if res:
                 return res

@@ -177,7 +177,16 @@ async def optimize_portfolio(
         res["validation"] = validate_financial_metrics(res)
         return JSONResponse(content=safe_json(res))
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        # Instead of raising 400, return a graceful failure with a warning
+        logger.warning(f"Optimization failed due to data issues: {ve}")
+        return JSONResponse(content=safe_json({
+            "optimal_weights": {t: 1.0/len(req.tickers) for t in req.tickers},
+            "weight_details": [],
+            "metrics": {"return": 0, "volatility": 0, "sharpe": 0},
+            "frontier": [],
+            "random_portfolios": [],
+            "validation": {"is_valid": False, "messages": [f"Optimization failed: {str(ve)}. Using equal weight fallback."]}
+        }))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

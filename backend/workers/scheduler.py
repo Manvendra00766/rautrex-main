@@ -43,14 +43,27 @@ class BackgroundWorker:
             replace_existing=True
         )
 
-        # Schedule Daily Corporate Actions Ingestion daily at 4:00 AM IST
+        # Schedule Daily Angel One Token Refresh at 8:00 AM IST
+        from services.adapters.angelone_adapter import AngelOneAdapter
         self.scheduler.add_job(
-            self.safe_job(self.run_scheduled_corporate_actions),
+            self.safe_job(self.refresh_angelone_token),
             'cron',
-            hour=4,
+            hour=8,
             minute=0,
             timezone='Asia/Kolkata',
-            id='run_corporate_actions',
+            id='refresh_angelone_token',
+            replace_existing=True
+        )
+
+        # Schedule Daily Bond Yield Ingestion at 6:00 PM IST
+        from services.bond_service import bond_service
+        self.scheduler.add_job(
+            self.safe_job(bond_service.fetch_gsec_yields),
+            'cron',
+            hour=18,
+            minute=0,
+            timezone='Asia/Kolkata',
+            id='fetch_bond_yields',
             replace_existing=True
         )
 
@@ -104,6 +117,19 @@ class BackgroundWorker:
             except Exception as e:
                 logger.error(f"Background job {func.__name__} failed: {e}")
         return wrapper
+
+    async def refresh_angelone_token(self):
+        """
+        Background job to refresh Angel One token daily.
+        """
+        logger.info("Running scheduled Angel One token refresh...")
+        from services.adapters.angelone_adapter import AngelOneAdapter
+        adapter = AngelOneAdapter()
+        success = await adapter.refresh_token()
+        if success:
+            logger.info("Scheduled Angel One token refresh successful.")
+        else:
+            logger.error("Scheduled Angel One token refresh failed.")
 
     async def cleanup_task(self):
         logger.info("Running background cleanup tasks...")

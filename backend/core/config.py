@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     FALLBACK_MARKET_DATA_URL: str = os.getenv("FALLBACK_MARKET_DATA_URL", "")
     FALLBACK_API_KEY: str = os.getenv("FALLBACK_API_KEY", "")
 
+    # Angel One
+    ANGELONE_API_KEY: str = os.getenv("ANGELONE_API_KEY", "")
+    ANGELONE_CLIENT_ID: str = os.getenv("ANGELONE_CLIENT_ID", "")
+    ANGELONE_PASSWORD: str = os.getenv("ANGELONE_PASSWORD", "")
+    ANGELONE_TOTP_TOKEN: str = os.getenv("ANGELONE_TOTP_TOKEN", "")
+
     # Upstox
     UPSTOX_CLIENT_ID: str = os.getenv("UPSTOX_CLIENT_ID", "")
     UPSTOX_CLIENT_SECRET: str = os.getenv("UPSTOX_CLIENT_SECRET", "")

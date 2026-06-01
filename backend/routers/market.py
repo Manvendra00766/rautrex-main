@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_db
 from services.market_data_service import market_data_service, get_indices, get_movers, run_screener
 from services.ticker_resolver import ticker_resolver_service
+from services.adapters.angelone_adapter import AngelOneAdapter
+from services.bond_service import bond_service
 
 router = APIRouter()
 
@@ -90,5 +92,25 @@ async def fetch_market_status(symbol: str):
     """Exposes trading session session status, timezone, region, and hours for any symbol."""
     try:
         return market_calendar.get_market_status(symbol)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/auth/refresh")
+async def refresh_angelone_token():
+    """Automated token refresh for Angel One using TOTP."""
+    try:
+        adapter = AngelOneAdapter()
+        token = await adapter.refresh_token()
+        if token:
+            return {"status": "success", "message": "Angel One token refreshed and cached in Redis."}
+        raise HTTPException(status_code=400, detail="Failed to refresh Angel One token.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/bonds/yields")
+async def get_bond_yields():
+    """Returns current Indian Government Bond yields."""
+    try:
+        data = await bond_service.fetch_gsec_yields()
+        return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
