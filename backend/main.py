@@ -1,3 +1,27 @@
+# ── STARTUP DIAGNOSTICS ──
+import os
+import sys
+print("=" * 50, file=sys.stderr)
+print("RAUTREX STARTUP DIAGNOSTICS", file=sys.stderr)
+print(f"Python: {sys.version}", file=sys.stderr)
+print(f"DATABASE_URL present: {'YES' if os.getenv('DATABASE_URL') else 'MISSING'}", file=sys.stderr)
+if os.getenv("DATABASE_URL"):
+    raw = os.getenv("DATABASE_URL")
+    masked = raw[:50] + "..." if len(raw) > 50 else raw
+    print(f"DATABASE_URL value: {masked}", file=sys.stderr)
+else:
+    print("FATAL: DATABASE_URL not set", file=sys.stderr)
+    print("Available env vars:", file=sys.stderr)
+    for k in sorted(os.environ.keys()):
+        if 'db' in k.lower() or 'database' in k.lower() or 'sql' in k.lower():
+            print(f"  {k}=...", file=sys.stderr)
+    print("\nSet DATABASE_URL in HF Space Settings -> Secrets", file=sys.stderr)
+    sys.exit(1)
+print(f"Working dir: {os.getcwd()}", file=sys.stderr)
+print(f"Contents: {os.listdir('.')}", file=sys.stderr)
+print("=" * 50, file=sys.stderr)
+# ── END DIAGNOSTICS ──
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
