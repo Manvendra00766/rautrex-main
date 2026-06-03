@@ -26,7 +26,7 @@ export default function ChartWrapper({ children, height = 300 }: { children: Rea
     return (
       <div
         ref={containerRef}
-        style={{ width: '100%', height, minHeight: height, minWidth: 0, background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: 13 }}
+        style={{ width: '100%', height, minHeight: height, minWidth: 1, background: 'rgba(255,255,255,0.03)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: 13 }}
       >
         Loading chart...
       </div>
@@ -34,7 +34,7 @@ export default function ChartWrapper({ children, height = 300 }: { children: Rea
   }
   
   return (
-    <div ref={containerRef} style={{ width: '100%', height, minHeight: 1, minWidth: 1 }}>
+    <div ref={containerRef} style={{ width: '100%', height, minHeight: height, minWidth: 1, position: 'relative' }}>
       {children}
     </div>
   );

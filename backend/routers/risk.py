@@ -32,14 +32,23 @@ async def get_portfolio_risk(
     req: RiskRequest, 
     current_user = Depends(get_current_user)
 ):
-    # Validate weights sum to 1.0
+    # Normalize weights to sum to 1.0
     weights = [item.weight for item in req.portfolio]
-    if abs(sum(weights) - 1.0) > 1e-4:
-        raise HTTPException(status_code=400, detail="Portfolio weights must sum to 100%")
+    total_weight = sum(weights)
+    
+    if total_weight <= 0:
+        raise HTTPException(status_code=400, detail="Portfolio weights must sum to a positive value")
+    
+    # Auto-normalize if total weight is not 1.0 but is reasonable
+    normalized_portfolio = []
+    for item in req.portfolio:
+        normalized_item = item.dict()
+        normalized_item["weight"] = item.weight / total_weight
+        normalized_portfolio.append(normalized_item)
         
     try:
         res = await calculate_portfolio_risk(
-            [item.dict() for item in req.portfolio],
+            normalized_portfolio,
             req.start_date,
             req.end_date,
             req.benchmark
@@ -51,7 +60,7 @@ async def get_portfolio_risk(
     except Exception as e:
         import traceback
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Risk calculation failed: {str(e)}")
 
 @router.post("/stress-test")
 async def post_stress_test(
